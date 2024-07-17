@@ -2,11 +2,13 @@
   <!-- Include the turtlebot3_gazebo turtlebot3_world.launch file -->
   <!-- <include file="$(find turtlebot3_gazebo)/launch/turtlebot3_world.launch" /> -->
 
+  <rosparam file="$(find ekf_slam_pkg)/config/ekf_slam_params.yaml" command="load"/>
+
   <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
   <arg name="x_pos" default="1.5"/>
   <arg name="y_pos" default="1.5"/>
-  <arg name="z_pos" default="0.0"/>
-  <arg name="yaw_pos" default="3.1415" />
+  <arg name="z_pos" default="0"/>
+  <arg name="yaw_pos" default="3.1415"/>
   <arg name="configuration_basename" default="turtlebot3_lds_2d.lua"/>
   <arg name="set_base_frame" default="base_footprint"/>
   <arg name="set_odom_frame" default="odom"/>
@@ -26,10 +28,9 @@
     <arg name="verbose" value="false"/>
   </include>
 
+  <param name="robot_description" command="$(find xacro)/xacro --inorder $(find ekf_slam_pkg)/urdf/turtlebot3_$(arg model).urdf.xacro" />
 
-  <param name="robot_description" command="$(find xacro)/xacro --inorder $(find turtlebot3_gazebo)/urdf/turtlebot3_$(arg model).urdf.xacro" />
-
-  <node pkg="gazebo_ros" type="spawn_model" name="spawn_urdf"  args="-urdf -model turtlebot3_$(arg model) -x $(arg x_pos) -y $(arg y_pos) -z $(arg z_pos) -Y $(arg yaw_pos) -param robot_description" />
+  <node pkg="gazebo_ros" type="spawn_model" name="spawn_urdf" args="-urdf -model turtlebot3_$(arg model) -x $(arg x_pos) -y $(arg y_pos) -z $(arg z_pos) -param robot_description" />
 
   <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher">
     <param name="publish_frequency" type="double" value="50.0" />
@@ -62,17 +63,5 @@
     <param name="DWAPlannerROS/min_vel_x" value="0.0" if="$(arg move_forward_only)"/>
   </node>
 
-
   <node type="rviz" name="rviz" pkg="rviz" args="-d $(find turtlebot3_gazebo)/rviz/turtlebot3_gazebo_model.rviz"/>
-
-  <!-- <node name="main_node" pkg="slam_pkg" type="main_node"> </node> -->
-
-  <!-- <node name="ekf_slam_node" pkg="slam_pkg" type="EKF_Slam.py"> </node> -->
-
-  <!-- <node name="Transformer" pkg="slam_pkg" type="Transformer.py"> </node> -->
-
-  <!-- <node name="SendGoal" pkg="slam_pkg" type="SendGoal.py"> </node> -->
-
-  <!-- <node pkg="rosbag" type="record" name="rosbag_record_JointState_and_GroundTruth" output="screen" args="record ground_truth/state joint_states cmd_vel odom imu -o /home/cocokayya18/Spezialisierung-1/src/slam_pkg/rosbag_files/Square_data" /> -->
-
 </launch>
