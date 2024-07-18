@@ -1,7 +1,4 @@
-robot:
-
-  initial_state: [0, 0, 0]
-  
+robot:  
   initial_position:
     x: 1.5
     y: 1.5
