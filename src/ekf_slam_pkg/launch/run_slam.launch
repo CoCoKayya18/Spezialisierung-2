@@ -41,7 +41,7 @@
   </node> -->
 
   <!-- Gmapping -->
-  <node pkg="gmapping" type="slam_gmapping" name="turtlebot3_slam_gmapping">  <!-- output="screen" -->
+  <node pkg="gmapping" type="slam_gmapping" name="turtlebot3_slam_gmapping"> 
     <param name="base_frame" value="$(arg set_base_frame)"/>
     <param name="odom_frame" value="$(arg set_odom_frame)"/>
     <param name="map_frame"  value="$(arg set_map_frame)"/>
@@ -63,7 +63,7 @@
     <param name="DWAPlannerROS/min_vel_x" value="0.0" if="$(arg move_forward_only)"/>
   </node>
 
-  <node type="rviz" name="rviz" pkg="rviz" args="-d $(find turtlebot3_gazebo)/rviz/turtlebot3_gazebo_model.rviz"/>
+  <node type="rviz" name="rviz" pkg="rviz" args="-d $(find ekf_slam_pkg)/rviz/rviz_config.rviz"/>
 
   <node name="main" pkg="ekf_slam_pkg" type="main.py" output="screen"> </node>
 

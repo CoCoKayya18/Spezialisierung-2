@@ -1,10 +1,7 @@
 import numpy as np
+import rospy
 import pickle
 import os
-
-def wrap_angle(angle):
-    # Wrap angle between -pi and pi
-    return (angle + np.pi) % (2 * np.pi) - np.pi
 
 # Add more utility functions as needed
 
@@ -23,3 +20,12 @@ def wrap_angle(angle):
 #     rescaledOuput = scaler_Y.inverse_transform(output)
 
 #     return rescaledOuput
+
+class Utils:
+    
+    def __init__(self):
+        rospy.loginfo("Utils class initialized")
+
+    def wrap_angle(angle):
+        # Wrap angle between -pi and pi
+        return (angle + np.pi) % (2 * np.pi) - np.pi

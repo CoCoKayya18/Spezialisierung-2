@@ -1,24 +1,28 @@
 #!/usr/bin/env python
 
-import rospy
+# import rospy
 import os
 import sys
+import rospy
+from ekf_slam_pkg import EKFSLAM
+from ekf_slam_pkg import Sensor
+from ekf_slam_pkg import Map
+from ekf_slam_pkg import Robot
+from ekf_slam_pkg import Utils
 
-print("PYTHONPATH:", sys.path)
-
-from ekf_slam_pkg.include.ekf_slam_pkg import EKFSLAM
 
 def main():
+
     rospy.init_node('ekf_slam_launcher', anonymous=True)
 
-    # Load parameters from the YAML file
-    param_file = os.path.join(rospy.get_param('/ekf_slam_pkg_path'), 'config', 'ekf_slam_params.yaml')
-    with open(param_file, 'r') as f:
-        yaml_params = rospy.load_param(f)
+    # # Load parameters from the YAML file
+    # param_file = os.path.join(rospy.get_param('../src/ekf_slam_pkg'), '/config', '/ekf_slam_params.yaml')
+    # with open(param_file, 'r') as f:
+    #     yaml_params = rospy.load_param(f)
 
-    # Set parameters
-    for key, value in yaml_params.items():
-        rospy.set_param(key, value)
+    # # Set parameters
+    # for key, value in yaml_params.items():
+    #     rospy.set_param(key, value)
 
     # Get the initial position parameters
     x_pos = rospy.get_param("robot/initial_position/x")
@@ -46,5 +50,4 @@ def main():
     rospy.spin()
 
 if __name__ == '__main__':
-    print("PYTHONPATH:", sys.path)
-    # main()
+    main()
