@@ -1,5 +1,6 @@
 import numpy as np
 import pickle
+import rospy
 
 class EKFSLAM:
     def __init__(self, robot, sensor, map, config, utils):
@@ -11,10 +12,14 @@ class EKFSLAM:
         self.state = np.zeros((3, 1))  # Example: [x, y, theta]
         self.process_noise = config['process_noise']
         self.measurement_noise = config['measurement_noise']
+        rospy.loginfo("EKF Class initialized")
+        
 
-    def predict(self, control):
+    # EKF prediction step
+    def predict(self, currentPose):
 
-        print("It works:" + control)
+        print("It works:" + str(currentPose))
+
         # loaded_model = pickle.load(filepath)
 
         # # Predict using the loaded model and the standardized data
@@ -22,18 +27,11 @@ class EKFSLAM:
 
         # # Print the model parameters
         # print(loaded_model)
+        self.predictedPose = currentPose
+        return self.predictedPose
 
-        # EKF prediction step
-        pass
-
-    def update(self, measurements):
+    def correct(self, scanMessage):
+        print("It works too:" + str(scanMessage))
         # EKF update step
-        pass
-
-    def run(self):
-        control = self.robot.get_control()
-        prediction = self.predict(control)
-        
-        # measurements = self.sensor.get_measurements()
-        # self.update(measurements)
-        # self.map.update(self.state, measurements)
+        self.correctedPose = self.predictedPose
+        return self.correctedPose
