@@ -25,10 +25,10 @@ def main():
     #     rospy.set_param(key, value)
 
     # Get the initial position parameters
-    x_pos = rospy.get_param("robot/initial_position/x")
-    y_pos = rospy.get_param("robot/initial_position/y")
-    z_pos = rospy.get_param("robot/initial_position/z")
-    model = rospy.get_param("TURTLEBOT3_MODEL", "burger")
+    # x_pos = rospy.get_param("robot/initial_position/x")
+    # y_pos = rospy.get_param("robot/initial_position/y")
+    # z_pos = rospy.get_param("robot/initial_position/z")
+    # model = rospy.get_param("TURTLEBOT3_MODEL", "burger")
 
     # Initialize components
     config = {
