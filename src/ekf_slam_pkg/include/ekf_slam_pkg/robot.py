@@ -6,6 +6,7 @@ from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point
 from geometry_msgs.msg import Pose
 from tf.transformations import quaternion_from_euler
+from math import sqrt
 
 class Robot:
     def __init__(self, config, ekf_slam):
@@ -28,7 +29,7 @@ class Robot:
 
         # Publishers and subscribers
         self.odom_sub = rospy.Subscriber('/odom', Odometry, self.odom_callback)
-        self.odom_sub = rospy.Subscriber('/scan', LaserScan, self.scan_callback)
+        self.laser_sub = rospy.Subscriber('/scan', LaserScan, self.scan_callback)
         self.ground_truth_sub = rospy.Subscriber('/ground_truth/state', Odometry, self.ground_truth_callback)
 
         self.GT_path_pub = rospy.Publisher('/Ground_Truth_Path', Marker, queue_size=10)
@@ -82,9 +83,11 @@ class Robot:
 
         marker.points = [Point(p.position.x, p.position.y, p.position.z) for p in path]
 
+        # print(f"Number of points in marker: {len(marker.points)}")
+
         self.GT_path_pub.publish(marker)
         
-    def publish_EKF_path(self, path, namespace, color):
+    def publish_EKF_path(self, path, namespace, color, min_distance=0.05):
         marker = Marker()
         marker.header.frame_id = "map"
         marker.header.stamp = rospy.Time.now()
@@ -92,21 +95,42 @@ class Robot:
         marker.id = 0
         marker.type = Marker.LINE_STRIP
         marker.action = Marker.ADD
-        marker.scale.x = 3  # Line width
+        marker.scale.x = 0.03  # Line width
         marker.color.r = color[0]
         marker.color.g = color[1]
         marker.color.b = color[2]
-        marker.color.a = 1
+        marker.color.a = 0.5
         # Set the default pose for the marker (identity pose)
         marker.pose.orientation.w = 1.0
         marker.lifetime = rospy.Duration(0)
 
-        marker.points = [Point(p.position.x, p.position.y, p.position.z) for p in path]
+        # Persistent filtered points list to store path markers
+        if not hasattr(self, 'filtered_points'):
+            self.filtered_points = []  # Initialize the list only once
+
+        # Check and add new points to the filtered points list
+        if len(path) > 0:
+            # Get the last filtered point
+            last_point = self.filtered_points[-1] if self.filtered_points else None
+            
+            for p in path:
+                new_point = Point(p.position.x, p.position.y, p.position.z)
+                if last_point is None or sqrt((new_point.x - last_point.x) ** 2 + (new_point.y - last_point.y) ** 2) > min_distance:
+                    self.filtered_points.append(new_point)
+                    last_point = new_point
+
+        # Set the filtered points to the marker
+        marker.points = self.filtered_points
+
+        # Debugging prints
+        # print(f"Publishing {len(marker.points)} points for EKF path.")
+        # for pt in marker.points:
+        #     print(f"Point: x={pt.x}, y={pt.y}, z={pt.z}")
 
         # print("Point: ")
         # print(marker.points)
 
-        print(f"Number of points in marker: {len(marker.points)}")
+        # print(f"Number of points in marker: {len(marker.points)}")
 
         self.EKF_path_pub.publish(marker)
     
