@@ -37,26 +37,19 @@ class EKFSLAM:
     # EKF prediction step
     def predict(self, currentVel, currentPosition):
 
-        rospy.loginfo(f"Input Velocities: {currentVel}")
-
         currentVel = np.array(currentVel).reshape(1, -1)  # Ensure it has the shape (1, 3)
 
         # Scale the input data correctly
         odomVelScaled = self.scaler_X.transform(currentVel)
-        rospy.loginfo(f"Scaled Velocities: {odomVelScaled}")
 
         # Predict using the loaded model and the standardized data
         y_predict_mean, y_predict_variance = self.model.predict(odomVelScaled)
-        rospy.loginfo(f"Predicted (Scaled) Deltas: {y_predict_mean}")
 
         predictedDelta = self.scaler_Y.inverse_transform(y_predict_mean)
-        rospy.loginfo(f"Predicted Deltas: {predictedDelta}")
 
         orientation_q = currentPosition.orientation
         orientation_list = [orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w]
         (roll, pitch, theta) = euler_from_quaternion(orientation_list)
-
-        rospy.loginfo(f"Current Position: {self.state.position.x}, {self.state.position.y}, {theta}")
 
         currentPosition.position.x += predictedDelta[0][0]  # Add the first delta to x
         currentPosition.position.y += predictedDelta[0][1]  # Add the second delta to y
