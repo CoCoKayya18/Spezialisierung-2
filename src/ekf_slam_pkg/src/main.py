@@ -43,7 +43,7 @@ def main():
     utils = Utils()
     ekf_slam = EKFSLAM(None, sensor, map, config, utils)  # Initialize without robot first
     
-    robot = Robot(config, ekf_slam)
+    robot = Robot(config, ekf_slam, utils)
     ekf_slam.robot = robot  # Set the robot reference after initialization
 
     rospy.loginfo("Started EKF SLAM launch")
