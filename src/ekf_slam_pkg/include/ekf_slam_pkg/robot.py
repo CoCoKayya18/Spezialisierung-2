@@ -71,7 +71,7 @@ class Robot:
     def scan_callback(self, msg):
         self.scan_message = msg
         
-        # ekf_corrected_pose = self.ekf_slam.correct(self.scan_message)
+        ekf_corrected_pose = self.ekf_slam.correct(self.scan_message, self.position)
 
         # self.position = ekf_corrected_pose
         
@@ -145,11 +145,3 @@ class Robot:
 
         # Save EKF path to CSV
         self.utils.save_ekf_path_to_csv(path[-1])  # Save the last path point
-    
-
-    # def get_pose(self):
-    #     return self.current_pose
-
-    # def get_control(self):
-    #     rospy.loginfo("Control returned")
-    #     return self.current_pose

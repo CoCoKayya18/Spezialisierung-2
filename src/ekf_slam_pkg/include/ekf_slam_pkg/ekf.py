@@ -72,9 +72,68 @@ class EKFSLAM:
 
         return self.state
 
-    def correct(self, scanMessage):
-        # print("It works too:" + str(scanMessage))
+    def correct(self, scanMessage, currentPredictionPose):
+
+        # Extract current pose information
+        x = currentPredictionPose.position.x
+        y = currentPredictionPose.position.y
+        orientation_q = currentPredictionPose.orientation
+        orientation_list = [orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w]
+        _, _, theta = euler_from_quaternion(orientation_list)
+        
         # EKF update step
-        correctedPose = None
-        self.state = correctedPose
-        return self.state
+        z_t = self.sensor.extract_features_from_scan(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment)  # Extract features from LaserScan
+
+        # for z_i in z_t:
+
+        #     # Add new Landmark
+        #     newLandmark_x, newLandmark_y, newLandmark_s = self.map.add_landmark_estimates(x, y, theta, z_i)
+
+        #     # Iterate through observed landmarks
+        #     for k in range(1, self.N_t + 1):
+                
+        #         delta_k = np.array([
+        #             newLandmark_x - x,
+        #             newLandmark_y - y
+        #         ])
+                
+        #         q_k = np.dot(delta_k.T, delta_k)
+                
+        #         z_hat_k = np.array([
+        #             np.sqrt(q_k),
+        #             np.arctan2(delta_k[1], delta_k[0]) - theta,
+        #             newLandmark_s
+        #         ])
+
+        #         # Compute F_x,k matrix
+        #         F_x_k = self.map.compute_F_x_k(self.N_t, k)
+
+        #         # Compute H^k_t matrix
+        #         H_k_t = self.map.compute_H_k_t(delta_k, q_k, F_x_k)
+
+        #         # Compute Mahalanobis distance
+        #         pi_k, Psi_k = self.map.compute_mahalanobis_distance(z_i, z_hat_k, H_k_t, self.Sigma_t)
+
+
+        #     # Data association step
+        #     correctLandmarkIndex = self.map_handler.data_association(pi_k)
+
+        #     if correctLandmarkIndex is not None:
+        #         # Update landmark index
+        #         self.N_t = max(self.N_t, j)
+
+        #         # Kalman gain
+        #         K_i_t = self.Sigma_t @ H_k_t.T @ np.linalg.inv(Psi_k)
+
+        #         # Update state mean and covariance using MapHandler
+        #         x, y, theta = self.map_handler.update_state(x, y, theta, z_i, z_hat_k, K_i_t)
+        #         self.Sigma_t = (np.eye(len(self.Sigma_t)) - K_i_t @ H_k_t) @ self.Sigma_t
+
+
+        # # Update the robot's pose based on the corrected state estimate
+        # self.utils.update_pose_from_state(currentPredictionPose, x, y, theta)
+
+        rospy.loginfo("EKF correction step completed.")
+
+        return currentPredictionPose
+
