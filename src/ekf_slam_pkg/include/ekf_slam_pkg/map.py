@@ -1,10 +1,66 @@
 import rospy
+import numpy as np
 
 class Map:
     def __init__(self, config):
         self.landmarks = []
+        self.landmarkNumber = 0
         rospy.loginfo("Map class initialized")
 
-    def update(self, state, measurements):
-        # Update the map with new measurements
-        pass
+    def add_landmark_estimates(self, x, y, theta, z_i):
+        """
+        Update the landmark estimates given the robot's current pose and the observation.
+        """
+        r_i, phi_i, s_i = z_i
+        mu_N_plus_1_x = x + r_i * np.cos(phi_i + theta)
+        mu_N_plus_1_y = y + r_i * np.sin(phi_i + theta)
+        mu_N_plus_1_s = s_i
+        return mu_N_plus_1_x, mu_N_plus_1_y, mu_N_plus_1_s
+
+    def compute_F_x_k(self, num_landmarks, k):
+        """
+        Computes the F_x,k matrix for the k-th landmark.
+        """
+        state_dim = 3 + 2 * num_landmarks
+        F_x_k = np.zeros((5, state_dim))
+        F_x_k[:3, :3] = np.eye(3)
+        landmark_index = 3 + 2 * (k - 1)
+        F_x_k[3:, landmark_index:landmark_index + 2] = np.eye(2)
+        return F_x_k
+
+    def compute_H_k_t(self, delta_k, q_k, F_x_k):
+        """
+        Computes the H_k_t matrix.
+        """
+        H_k_t = (1 / q_k) * np.array([
+            [-np.sqrt(q_k) * delta_k[0], -np.sqrt(q_k) * delta_k[1], 0, np.sqrt(q_k) * delta_k[0], np.sqrt(q_k) * delta_k[1]],
+            [delta_k[1], -delta_k[0], -1, -delta_k[1], delta_k[0]],
+            [0, 0, 0, 0, 0]
+        ]) @ F_x_k
+        return H_k_t
+
+    def compute_mahalanobis_distance(self, z_i, z_hat_k, H_k_t, Sigma_t):
+        """
+        Computes the Mahalanobis distance for data association.
+        """
+        Psi_k = H_k_t @ Sigma_t @ H_k_t.T + self.measurement_noise
+        pi_k = (z_i - z_hat_k).T @ np.linalg.inv(Psi_k) @ (z_i - z_hat_k)
+        return pi_k, Psi_k
+
+    def data_association(self, pi_k):
+        """
+        Performs data association and returns the associated landmark index.
+        """
+        if np.min(pi_k) <= self.alpha:
+            return np.argmin(pi_k)
+        return None
+
+    def update_state(self, x, y, theta, z_i, z_hat_k, K_i_t):
+        """
+        Updates the state (x, y, theta) given the Kalman gain and measurement residual.
+        """
+        state_update = K_i_t @ (z_i - z_hat_k)
+        x += state_update[0]
+        y += state_update[1]
+        theta += state_update[2]
+        return x, y, theta

@@ -3,6 +3,7 @@ import rospy
 import csv
 from nav_msgs.msg import Odometry
 from tf.transformations import euler_from_quaternion
+from tf.transformations import quaternion_from_euler
 import pickle
 import os
 
@@ -33,6 +34,16 @@ class Utils:
         self.ground_truth_csv_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/ground_truth_path.csv'
         self.ekf_path_csv_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/ekf_path.csv'
         self.odom_velocities_csv_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/odom_velocities.csv'
+
+    def update_pose_from_state(self, pose, x, y, theta):
+        # Helper function to update the robot's pose from state vector
+        pose.position.x = x
+        pose.position.y = y
+        quaternion = quaternion_from_euler(0, 0, theta)
+        pose.orientation.x = quaternion[0]
+        pose.orientation.y = quaternion[1]
+        pose.orientation.z = quaternion[2]
+        pose.orientation.w = quaternion[3]
 
     def wrap_angle(angle):
         # Wrap angle between -pi and pi
