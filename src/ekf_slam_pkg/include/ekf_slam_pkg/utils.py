@@ -45,6 +45,8 @@ class Utils:
         pose.orientation.z = quaternion[2]
         pose.orientation.w = quaternion[3]
 
+        return pose
+
     def wrap_angle(angle):
         # Wrap angle between -pi and pi
         return (angle + np.pi) % (2 * np.pi) - np.pi

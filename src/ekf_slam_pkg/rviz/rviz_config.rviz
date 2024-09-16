@@ -169,9 +169,9 @@ Visualization Manager:
       Unreliable: false
       Value: false
       Visibility:
-        "": true
         Axes: true
         DepthCloud: true
+        EKF_Path: true
         GT_Path: true
         Grid: true
         LaserScan: true
@@ -252,19 +252,19 @@ Visualization Manager:
       Use rainbow: true
       Value: false
     - Class: rviz/Marker
-      Enabled: false
+      Enabled: true
       Marker Topic: /Ground_Truth_Path
       Name: GT_Path
       Namespaces:
-        {}
+        ground_truth_path: true
       Queue Size: 100
-      Value: false
+      Value: true
     - Class: rviz/Marker
       Enabled: true
       Marker Topic: /EKF_Path
       Name: EKF_Path
       Namespaces:
-        ekf_path: true
+        {}
       Queue Size: 100
       Value: true
   Enabled: true

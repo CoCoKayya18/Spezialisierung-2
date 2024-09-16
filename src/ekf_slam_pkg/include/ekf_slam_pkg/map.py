@@ -11,11 +11,10 @@ class Map:
         """
         Update the landmark estimates given the robot's current pose and the observation.
         """
-        r_i, phi_i, s_i = z_i
+        r_i, phi_i = z_i
         mu_N_plus_1_x = x + r_i * np.cos(phi_i + theta)
         mu_N_plus_1_y = y + r_i * np.sin(phi_i + theta)
-        mu_N_plus_1_s = s_i
-        return mu_N_plus_1_x, mu_N_plus_1_y, mu_N_plus_1_s
+        return mu_N_plus_1_x, mu_N_plus_1_y
 
     def compute_F_x_k(self, num_landmarks, k):
         """
