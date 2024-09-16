@@ -8,6 +8,7 @@ class Sensor:
     def __init__(self, config):
         rospy.loginfo("Sensor class initialized")
         self.plot_counter = 1
+        self.first_call = True
         pass
 
     def extract_features_from_scan(self, scan_data, angle_min, angle_max, angle_increment, eps=0.2, min_samples=5):
@@ -53,13 +54,29 @@ class Sensor:
             
             self.visualize_features(valid_points, labels, features)
             
-            return features, labels, valid_points
+            return features
 
     def visualize_features(self, valid_points, labels, features):
         # Extract features using DBSCAN
         # features, labels, valid_points = self.extract_features_from_scan(scan_data, angle_min, angle_max, angle_increment, eps, min_samples)
 
         save_dir = '../Spezialisierung-2/src/ekf_slam_pkg/plots'
+
+        # Check if this is the first call
+        if self.first_call:
+            # Remove all existing plots in the directory
+            if os.path.exists(save_dir):
+                for file_name in os.listdir(save_dir):
+                    file_path = os.path.join(save_dir, file_name)
+                    try:
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                            rospy.loginfo(f"Deleted existing plot: {file_path}")
+                    except Exception as e:
+                        rospy.logerr(f"Error deleting file {file_path}: {e}")
+            else:
+                os.makedirs(save_dir)  # Create the directory if it doesn't exist
+            self.first_call = False  # Set the flag to False after the first call
 
         # Plot the LiDAR scan points
         plt.figure(figsize=(10, 10))

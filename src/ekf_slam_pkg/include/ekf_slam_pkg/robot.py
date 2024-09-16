@@ -12,7 +12,7 @@ import csv
 class Robot:
     def __init__(self, config, ekf_slam, utils):
 
-        #self.position = config['initial_position']
+        self.covariance = None
         self.position = Pose()
         self.position.position.x = config['initial_position']['x']
         self.position.position.y = config['initial_position']['y']
@@ -58,9 +58,10 @@ class Robot:
 
         self.current_vel = self.utils.transform_odometry_to_world(msg)
 
-        ekf_predicted_pose = self.ekf_slam.predict(self.current_vel, self.current_pose)  # Run the EKF prediction
+        ekf_predicted_pose, ekf_predicted_covariance = self.ekf_slam.predict(self.current_vel, self.current_pose)  # Run the EKF prediction
         
         self.position = ekf_predicted_pose
+        self.covariance = ekf_predicted_covariance
         
         self.ekf_path.append(ekf_predicted_pose)
         self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
@@ -71,7 +72,7 @@ class Robot:
     def scan_callback(self, msg):
         self.scan_message = msg
         
-        ekf_corrected_pose = self.ekf_slam.correct(self.scan_message, self.position)
+        ekf_corrected_pose, ekf_corrected_covariance = self.ekf_slam.correct(self.scan_message, self.position)
 
         # self.position = ekf_corrected_pose
         
@@ -104,7 +105,12 @@ class Robot:
 
         # print(f"Number of points in marker: {len(marker.points)}")
 
-        self.GT_path_pub.publish(marker)
+        if self.GT_path_pub.get_num_connections() > 0:
+            self.GT_path_pub.publish(marker)
+        else:
+            rospy.logwarn("No subscribers to the GT path topic or the topic is closed.")
+
+        # self.GT_path_pub.publish(marker)
         
     def publish_EKF_path(self, path, namespace, color, min_distance=0.05):
         marker = Marker()
@@ -141,7 +147,12 @@ class Robot:
         # Set the filtered points to the marker
         marker.points = self.filtered_points
 
-        self.EKF_path_pub.publish(marker)
+        if self.EKF_path_pub.get_num_connections() > 0:
+            self.EKF_path_pub.publish(marker)
+        else:
+            rospy.logwarn("No subscribers to the EKF path topic or the topic is closed.")
+
+        # self.EKF_path_pub.publish(marker)
 
         # Save EKF path to CSV
         self.utils.save_ekf_path_to_csv(path[-1])  # Save the last path point

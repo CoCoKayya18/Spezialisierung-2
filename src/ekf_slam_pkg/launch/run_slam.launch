@@ -5,8 +5,8 @@
   <rosparam file="$(find ekf_slam_pkg)/config/ekf_slam_params.yaml" command="load"/>
 
   <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
-  <arg name="x_pos" default="1.5"/>
-  <arg name="y_pos" default="1.5"/>
+  <arg name="x_pos" default="1.0"/>
+  <arg name="y_pos" default="1.0"/>
   <arg name="z_pos" default="0"/>
   <arg name="yaw_pos" default="3.1415"/>
   <arg name="configuration_basename" default="turtlebot3_lds_2d.lua"/>
@@ -18,8 +18,8 @@
   <arg name="move_forward_only" default="true"/>
 
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
-    <arg name="world_name" value="$(find turtlebot3_gazebo)/worlds/turtlebot3_world.world"/>
-    <!-- <arg name="world_name" value="$(find turtlebot3_gazebo)/worlds/random_world.world"/> -->
+    <!-- <arg name="world_name" value="$(find turtlebot3_gazebo)/worlds/turtlebot3_world.world"/> -->
+    <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/myWorld.world"/>
     <arg name="paused" value="false"/>
     <arg name="use_sim_time" value="true"/>
     <arg name="gui" value="false"/>
@@ -35,6 +35,8 @@
   <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher">
     <param name="publish_frequency" type="double" value="50.0" />
   </node>
+
+  <node pkg="tf2_ros" type="static_transform_publisher" name="static_transform_publisher" args="0.000 -0.005 0.000 0 0 0 /map /base_link" />
 
   <!-- <node name="joint_state_publisher_gui" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui" >
     <param name="publish_frequency" type="double" value="30.0"/>
