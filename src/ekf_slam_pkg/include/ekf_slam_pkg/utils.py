@@ -7,24 +7,6 @@ from tf.transformations import quaternion_from_euler
 import pickle
 import os
 
-# Add more utility functions as needed
-
-# def scaleInput(odometryData):
-#     with open(os.path.join(scalerFilePath, scaler_filenameX), 'rb') as file:
-#         scaler_X = pickle.load(file)
-
-#     standardizedInput = scaler_X.transform(odometryData)
-
-#     return standardizedInput
-
-# def rescaleOutput(output):
-#     with open(os.path.join(scalerFilePath, scaler_filenameY), 'rb') as file:
-#         scaler_Y = pickle.load(file)
-    
-#     rescaledOuput = scaler_Y.inverse_transform(output)
-
-#     return rescaledOuput
-
 class Utils:
     
     def __init__(self):
@@ -108,6 +90,6 @@ class Utils:
         with open(self.ekf_path_csv_path, 'a', newline='') as csvfile:
             writer = csv.writer(csvfile)
             timestamp = rospy.Time.now().to_sec()
-            writer.writerow([timestamp, pose.position.x, pose.position.y, pose.position.z])
+            writer.writerow([timestamp, pose[0], pose[1], pose[2]])
 
         
