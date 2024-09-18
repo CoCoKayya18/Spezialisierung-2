@@ -10,6 +10,7 @@ Panels:
         - /GT_Path1
         - /GT_Path1/Namespaces1
         - /EKF_Path1
+        - /Slam_Map1
       Splitter Ratio: 0.6029411554336548
     Tree Height: 588
   - Class: rviz/Selection
@@ -169,6 +170,7 @@ Visualization Manager:
       Unreliable: false
       Value: false
       Visibility:
+        "": true
         Axes: true
         DepthCloud: true
         EKF_Path: true
@@ -264,7 +266,15 @@ Visualization Manager:
       Marker Topic: /EKF_Path
       Name: EKF_Path
       Namespaces:
-        {}
+        ekf_path: true
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /slam_map
+      Name: Slam_Map
+      Namespaces:
+        landmarks: true
       Queue Size: 100
       Value: true
   Enabled: true

@@ -78,3 +78,17 @@ class Map:
         y += state_update[1]
         theta += state_update[2]
         return x, y, theta
+    
+    def get_landmarks(self, state_vector):
+
+        landmarks = []
+        
+        # Ensure state vector has landmarks
+        if len(state_vector) > 3:
+            # Extract landmarks from state vector
+            for i in range(3, len(state_vector), 2):
+                x_landmark = state_vector[i]
+                y_landmark = state_vector[i + 1]
+                landmarks.append((x_landmark, y_landmark))
+        
+        return landmarks
