@@ -27,6 +27,7 @@ class Robot:
 
         self.GT_path_pub = rospy.Publisher('/Ground_Truth_Path', Marker, queue_size=10)
         self.EKF_path_pub = rospy.Publisher('/EKF_Path', Marker, queue_size=10)
+        self.map_pub = rospy.Publisher('/slam_map', Marker, queue_size=10)
         
         self.current_pose = None
         self.current_vel = np.zeros((3, 1))
@@ -62,10 +63,11 @@ class Robot:
         
         ekf_corrected_pose, ekf_corrected_covariance = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
 
-        # self.position = ekf_corrected_pose
+        self.position = ekf_corrected_pose
         
-        # self.ekf_path.append(ekf_corrected_pose)
-        # self.publish_EKF_path(self.ekf_path, "ekf_path", [1.0, 0.0, 0.0])  # Red path
+        self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
+        self.ekf_path.append(ekf_corrected_pose)
+        self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Red path
 
     def ground_truth_callback(self, msg):
         self.ground_truth_path.append(msg.pose.pose)
@@ -139,3 +141,33 @@ class Robot:
 
         # Save EKF path to CSV
         self.utils.save_ekf_path_to_csv(path[-1])  # Save the last path point
+
+    def publish_map(self, landmarks, namespace="landmarks", color=[1.0, 0.0, 0.0]):
+        marker = Marker()
+        marker.header.frame_id = "map"
+        marker.header.stamp = rospy.Time.now()
+        marker.ns = namespace
+        marker.id = 0
+        marker.type = Marker.POINTS
+        marker.action = Marker.ADD
+        marker.scale.x = 0.1  # Set the size of the points
+        marker.scale.y = 0.1
+        marker.color.r = color[0]
+        marker.color.g = color[1]
+        marker.color.b = color[2]
+        marker.color.a = 1.0  # Fully opaque
+
+        # Add landmarks as points
+        for lm in landmarks:
+            point = Point()
+            point.x = lm[0]  # Landmark X coordinate
+            point.y = lm[1]  # Landmark Y coordinate
+            point.z = 0      # Landmarks are in 2D, so Z is 0
+            marker.points.append(point)
+
+        # Publish the marker to the /slam_map topic
+        if self.map_pub.get_num_connections() > 0:
+            self.map_pub.publish(marker)
+        else:
+            rospy.logwarn("No subscribers to the map topic or the topic is closed.")
+
