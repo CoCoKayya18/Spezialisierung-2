@@ -5,6 +5,8 @@ class Map:
     def __init__(self, config):
         self.landmarks = []
         self.landmarkNumber = 0
+
+        self.alpha = 5.991 # 95% confidence based on Chi-squared distribution
         rospy.loginfo("Map class initialized")
 
     def add_landmark_estimates(self, x, y, theta, z_i):
@@ -31,18 +33,30 @@ class Map:
         """
         Computes the H_k_t matrix.
         """
+
+        # As i am not using any signatures for the landmark, the H matrix gets reduced
         H_k_t = (1 / q_k) * np.array([
-            [-np.sqrt(q_k) * delta_k[0], -np.sqrt(q_k) * delta_k[1], 0, np.sqrt(q_k) * delta_k[0], np.sqrt(q_k) * delta_k[1]],
-            [delta_k[1], -delta_k[0], -1, -delta_k[1], delta_k[0]],
-            [0, 0, 0, 0, 0]
+            [np.sqrt(q_k) * delta_k[0], -np.sqrt(q_k) * delta_k[1], 0, -np.sqrt(q_k) * delta_k[0], np.sqrt(q_k) * delta_k[1]],
+            [delta_k[1], delta_k[0], -1, -delta_k[1], -delta_k[0]]
         ]) @ F_x_k
+
         return H_k_t
 
-    def compute_mahalanobis_distance(self, z_i, z_hat_k, H_k_t, Sigma_t):
+    def compute_mahalanobis_distance(self, z_i, z_hat_k, H_k_t, Sigma_t, measurement_noise):
         """
         Computes the Mahalanobis distance for data association.
         """
-        Psi_k = H_k_t @ Sigma_t @ H_k_t.T + self.measurement_noise
+
+        # Print the dimensions and values of the inputs
+        print("\n==== Mahalanobis Distance Computation ====")
+        
+        print(f"z_i (measurement): {z_i.shape}\n{z_i}")
+        print(f"z_hat_k (predicted measurement): {z_hat_k.shape}\n{z_hat_k}")
+        print(f"H_k_t (Jacobian): {H_k_t.shape}\n{H_k_t}")
+        print(f"Sigma_t (covariance matrix): {Sigma_t.shape}\n{Sigma_t}")
+        print(f"measurement_noise: {measurement_noise.shape}\n{measurement_noise}")
+
+        Psi_k = H_k_t @ Sigma_t @ H_k_t.T + measurement_noise
         pi_k = (z_i - z_hat_k).T @ np.linalg.inv(Psi_k) @ (z_i - z_hat_k)
         return pi_k, Psi_k
 
