@@ -53,6 +53,7 @@ class Map:
         print(f"z_i (measurement): {z_i.shape}\n{z_i}")
         print(f"z_hat_k (predicted measurement): {z_hat_k.shape}\n{z_hat_k}")
         print(f"H_k_t (Jacobian): {H_k_t.shape}\n{H_k_t}")
+        print(f"H_k_t (Jacobian) transposed: {H_k_t.T.shape}\n{H_k_t.T}")
         print(f"Sigma_t (covariance matrix): {Sigma_t.shape}\n{Sigma_t}")
         print(f"measurement_noise: {measurement_noise.shape}\n{measurement_noise}")
 

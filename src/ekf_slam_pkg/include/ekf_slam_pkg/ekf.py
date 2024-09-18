@@ -49,7 +49,7 @@ class EKFSLAM:
         y_predict_mean, y_predict_variance = self.model.predict(odomVelScaled)
 
         predictedDelta = self.scaler_Y.inverse_transform(y_predict_mean)
-        predicted_covariance = np.diag(y_predict_variance ** 2)
+        predicted_covariance = predicted_covariance = np.diag(np.full(3, y_predict_variance[0]))
 
         currentPosition[0] += predictedDelta[0][0]  # Add the first delta to x
         currentPosition[1] += predictedDelta[0][1]  # Add the second delta to y
@@ -59,14 +59,14 @@ class EKFSLAM:
         self.state = currentPosition
         self.covariance = predicted_covariance
 
-        print("\n=== Predicted Covariance ===")
-        print(f"predicted_covariance shape: {y_predict_variance.shape}\n{y_predict_variance}")
+        # print("\n=== Predicted Covariance ===")
+        # print(f"predicted_covariance shape: {y_predict_variance.shape}\n{y_predict_variance}")
 
-        print("\n=== Converted Covariance ===")
-        print(f"predicted_covariance shape: {predicted_covariance.shape}\n{predicted_covariance}")
+        # print("\n=== Converted Covariance ===")
+        # print(f"predicted_covariance shape: {predicted_covariance.shape}\n{predicted_covariance}")
         
-        print("\n=== Self Covariance (after assignment) ===")
-        print(f"self.covariance shape: {self.covariance.shape}\n{self.covariance}\n")        
+        # print("\n=== Self Covariance (after assignment) ===")
+        # print(f"self.covariance shape: {self.covariance.shape}\n{self.covariance}\n")        
 
         return self.state, self.covariance
 
@@ -108,7 +108,7 @@ class EKFSLAM:
                 H_k_t = self.map.compute_H_k_t(delta_k, q_k, F_x_k)
 
                 # Compute Mahalanobis distance
-                pi_k, Psi_k = self.map.compute_mahalanobis_distance(z_i, z_hat_k, H_k_t, self.covariance, self.measurement_noise)
+                pi_k, Psi_k = self.map.compute_mahalanobis_distance(z_i, z_hat_k, H_k_t, currentCovarianceMatrix, self.measurement_noise)
 
 
             # Data association step
@@ -123,11 +123,11 @@ class EKFSLAM:
 
                 # Update state mean and covariance using MapHandler
                 x, y, theta = self.map.update_state(x, y, theta, z_i, z_hat_k, K_i_t)
-                self.covariance = (np.eye(len(self.covariance)) - K_i_t @ H_k_t) @ self.Sigma_t
+                self.covariance = (np.eye(len(self.covariance)) - K_i_t @ H_k_t) @ self.covariance
 
 
         # # Update the robot's pose based on the corrected state estimate
-        self.state = self.utils.update_pose_from_state(currentStateVector, x, y, theta)
+        # self.state = self.utils.update_pose_from_state(currentStateVector, x, y, theta)
 
         # rospy.loginfo("EKF correction step completed.")
 

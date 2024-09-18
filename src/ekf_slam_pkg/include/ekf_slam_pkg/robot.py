@@ -60,7 +60,7 @@ class Robot:
     def scan_callback(self, msg):
         self.scan_message = msg
         
-        # ekf_corrected_pose, ekf_corrected_covariance = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
+        ekf_corrected_pose, ekf_corrected_covariance = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
 
         # self.position = ekf_corrected_pose
         
