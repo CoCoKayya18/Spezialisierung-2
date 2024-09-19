@@ -17,6 +17,7 @@ class EKFSLAM:
         self.covariance = np.eye(3)
         self.num_landmarks = 0 
         self.state = []
+        self.alpha = 5.991 # 95% confidence based on Chi-squared distribution
         
         self.process_noise = config['process_noise']
         self.measurement_noise = np.array([[config['measurement_noise'],0],[0, config['measurement_noise']]])
@@ -57,79 +58,162 @@ class EKFSLAM:
 
         # Update state
         self.state = currentPosition
-        self.covariance = predicted_covariance
-
-        # print("\n=== Predicted Covariance ===")
-        # print(f"predicted_covariance shape: {y_predict_variance.shape}\n{y_predict_variance}")
-
-        # print("\n=== Converted Covariance ===")
-        # print(f"predicted_covariance shape: {predicted_covariance.shape}\n{predicted_covariance}")
-        
-        # print("\n=== Self Covariance (after assignment) ===")
-        # print(f"self.covariance shape: {self.covariance.shape}\n{self.covariance}\n")        
+        self.covariance = predicted_covariance       
 
         return self.state, self.covariance
 
     def correct(self, scanMessage, currentStateVector, currentCovarianceMatrix):
 
-        # Extract current pose information
         x = currentStateVector[0]
         y = currentStateVector[1]
         theta = currentStateVector[2]
-        
+
+        initial_LM_variance = 1000  # Large initial uncertainty for new landmarks
+
         # EKF update step
-        z_t = self.sensor.extract_features_from_scan(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment)  # Extract features from LaserScan
+        z_t = self.sensor.extract_features_from_scan(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment)
+
+        # Lists to store Kalman gains and H_k matrices
+        K_list = []
+        H_list = []
+
+        # Initialize state and covariance updates
+        updateStateSum = np.zeros_like(currentStateVector)
+        updateCovarianceSum = np.zeros_like(currentCovarianceMatrix)
 
         for z_i in z_t:
             
             z_i = np.array(z_i)
-
+            
             # Add new Landmark
             newLandmark_x, newLandmark_y = self.map.add_landmark_estimates(x, y, theta, z_i)
 
-            currentStateVector.append(newLandmark_x)
-            currentStateVector.append(newLandmark_y)
-
-            # rospy.loginfo(f"Correction State Vector: {currentStateVector}")
-
-            # Iterate through observed landmarks
-            for k in range(0, self.num_landmarks + 1):
+            if self.num_landmarks == 0:
+                # If no landmarks exist, treat this as the first new landmark
+                print("Initializing first landmark...")
                 
+                # Add the new landmark to the state vector
+                currentStateVector.extend([newLandmark_x, newLandmark_y])
+
+                # Expand the covariance matrix to include the new landmark
+                n = currentCovarianceMatrix.shape[0]
+                expanded_covariance = np.zeros((n + 2, n + 2))
+                expanded_covariance[:n, :n] = currentCovarianceMatrix
+                landmark_covariance = np.array([[initial_LM_variance, 0],
+                                                [0, initial_LM_variance]])
+                expanded_covariance[n:, n:] = landmark_covariance
+                currentCovarianceMatrix = expanded_covariance
+
+                updateStateSum = np.zeros_like(currentStateVector)
+                updateCovarianceSum = np.zeros_like(currentCovarianceMatrix)
+
+                self.num_landmarks += 1  # Increment the number of landmarks
+
+                # No need for data association, directly update the state and covariance
                 delta_k = np.array([newLandmark_x - x, newLandmark_y - y])
-                
                 q_k = np.dot(delta_k.T, delta_k)
-                
                 z_hat_k = np.array([np.sqrt(q_k), np.arctan2(delta_k[1], delta_k[0]) - theta])
 
-                # Compute F_x,k matrix
-                F_x_k = self.map.compute_F_x_k(self.num_landmarks, k)
-
-                # Compute H^k_t matrix
+                F_x_k = self.map.compute_F_x_k(self.num_landmarks, self.num_landmarks)
                 H_k_t = self.map.compute_H_k_t(delta_k, q_k, F_x_k)
+                Psi_k = H_k_t @ currentCovarianceMatrix @ H_k_t.T + self.measurement_noise
+                K_i_t = currentCovarianceMatrix @ H_k_t.T @ np.linalg.inv(Psi_k)
 
-                # Compute Mahalanobis distance
-                pi_k, Psi_k = self.map.compute_mahalanobis_distance(z_i, z_hat_k, H_k_t, currentCovarianceMatrix, self.measurement_noise)
+                # Store Kalman gain and H_k_t for final summation later
+                K_list.append(K_i_t)
+                H_list.append(H_k_t)
 
+            else:
+                # Lists to store variables for all landmarks
+                F_x_k_list = []
+                H_k_list = []
+                Psi_k_list = []
+                pi_k_list = []
 
-            # Data association step
-            correctLandmarkIndex = self.map.data_association(pi_k)
+                # Iterate through observed landmarks
+                for k in range(0, self.num_landmarks):
 
-            if correctLandmarkIndex is not None:
-                # Update landmark index
-                self.num_landmarks = max(self.num_landmarks, correctLandmarkIndex)
+                    # Get the position of the k-th landmark
+                    newLandmark_x = currentStateVector[3 + 2 * k]
+                    newLandmark_y = currentStateVector[4 + 2 * k]
+                    
+                    delta_k = np.array([newLandmark_x - x, newLandmark_y - y])
+                    
+                    q_k = np.dot(delta_k.T, delta_k)
+                    
+                    z_hat_k = np.array([np.sqrt(q_k), np.arctan2(delta_k[1], delta_k[0]) - theta])
 
-                # Kalman gain
-                K_i_t = self.covariance @ H_k_t.T @ np.linalg.inv(Psi_k)
+                    # Compute F_x,k matrix
+                    F_x_k = self.map.compute_F_x_k(self.num_landmarks, k)
 
-                # Update state mean and covariance using MapHandler
-                x, y, theta = self.map.update_state(x, y, theta, z_i, z_hat_k, K_i_t)
-                self.covariance = (np.eye(len(self.covariance)) - K_i_t @ H_k_t) @ self.covariance
+                    # Compute H^k_t matrix
+                    H_k_t = self.map.compute_H_k_t(delta_k, q_k, F_x_k)
 
+                    # Compute Mahalanobis distance
+                    pi_k, Psi_k = self.map.compute_mahalanobis_distance(z_i, z_hat_k, H_k_t, currentCovarianceMatrix, self.measurement_noise)
 
-        # # Update the robot's pose based on the corrected state estimate
-        # self.state = self.utils.update_pose_from_state(currentStateVector, x, y, theta)
+                    # Store the computed values in lists
+                    F_x_k_list.append(F_x_k)
+                    H_k_list.append(H_k_t)
+                    Psi_k_list.append(Psi_k)
+                    pi_k_list.append(pi_k)
 
-        # rospy.loginfo("EKF correction step completed.")
+                # Data association decision: Find the best match by finding the smallest pi_k
+                best_pi_k = min(pi_k_list)
+                best_landmark_index = pi_k_list.index(best_pi_k)
+
+                if best_pi_k < self.alpha:
+                    # Use the best-matching landmark index to get the corresponding matrices
+                    best_F_x_k = F_x_k_list[best_landmark_index]
+                    best_H_k = H_k_list[best_landmark_index]
+                    best_Psi_k = Psi_k_list[best_landmark_index]
+
+                    K_i_t = currentCovarianceMatrix @ best_H_k.T @ np.linalg.inv(best_Psi_k)
+                    
+                else:
+
+                    # Add the new landmark to the state vector and covariance matrix
+                    currentStateVector.extend([newLandmark_x, newLandmark_y])
+
+                    # Expand the covariance matrix to include the new landmark
+                    n = currentCovarianceMatrix.shape[0]
+                    expanded_covariance = np.zeros((n + 2, n + 2))
+                    expanded_covariance[:n, :n] = currentCovarianceMatrix
+                    landmark_covariance = np.array([[initial_LM_variance, 0],
+                                                    [0, initial_LM_variance]])
+                    expanded_covariance[n:, n:] = landmark_covariance
+                    currentCovarianceMatrix = expanded_covariance
+
+                    self.num_landmarks += 1
+
+                    # Perform update for new landmark
+                    delta_k = np.array([newLandmark_x - x, newLandmark_y - y])
+                    q_k = np.dot(delta_k.T, delta_k)
+                    z_hat_k = np.array([np.sqrt(q_k), np.arctan2(delta_k[1], delta_k[0]) - theta])
+
+                    # Compute F_x,k and H_k for the Kalman update
+                    F_x_k = self.map.compute_F_x_k(self.num_landmarks, self.num_landmarks)
+                    H_k_t = self.map.compute_H_k_t(delta_k, q_k, F_x_k)
+                    Psi_k = H_k_t @ currentCovarianceMatrix @ H_k_t.T + self.measurement_noise
+                    K_i_t = currentCovarianceMatrix @ H_k_t.T @ np.linalg.inv(Psi_k)
+
+                # Store Kalman gain and H_k_t for final summation later
+                K_list.append(K_i_t)
+                H_list.append(H_k_t)
+
+        # Final Summation: Apply the cumulative update
+        for i, K_i_t in enumerate(K_list):
+            # Recompute state vector size before applying updates
+            updateStateSum += K_i_t @ (z_t[i] - (H_list[i] @ currentStateVector[:len(H_list[i][0])]))  # Match dimensions
+            updateCovarianceSum += K_i_t @ H_list[i]
+
+        # Update state mean and covariance
+        self.state = self.state + updateStateSum
+        self.covariance = currentCovarianceMatrix - updateCovarianceSum @ currentCovarianceMatrix
+
+        print(f"Landmark Numbers: {self.num_landmarks}")
 
         return self.state, self.covariance
+
+
 

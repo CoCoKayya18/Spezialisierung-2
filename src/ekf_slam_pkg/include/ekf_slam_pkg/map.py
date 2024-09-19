@@ -27,6 +27,9 @@ class Map:
         F_x_k[:3, :3] = np.eye(3)
         landmark_index = 3 + 2 * (k - 1)
         F_x_k[3:, landmark_index:landmark_index + 2] = np.eye(2)
+
+        # print(f"\n F_x_k (F-Matrix): {F_x_k.shape}\n{F_x_k}")
+
         return F_x_k
 
     def compute_H_k_t(self, delta_k, q_k, F_x_k):
@@ -48,14 +51,14 @@ class Map:
         """
 
         # Print the dimensions and values of the inputs
-        print("\n==== Mahalanobis Distance Computation ====")
+        # print("\n==== Mahalanobis Distance Computation ====")
         
-        print(f"z_i (measurement): {z_i.shape}\n{z_i}")
-        print(f"z_hat_k (predicted measurement): {z_hat_k.shape}\n{z_hat_k}")
-        print(f"H_k_t (Jacobian): {H_k_t.shape}\n{H_k_t}")
-        print(f"H_k_t (Jacobian) transposed: {H_k_t.T.shape}\n{H_k_t.T}")
-        print(f"Sigma_t (covariance matrix): {Sigma_t.shape}\n{Sigma_t}")
-        print(f"measurement_noise: {measurement_noise.shape}\n{measurement_noise}")
+        # print(f"\nz_i (measurement): {z_i.shape}\n{z_i}")
+        # print(f"\nz_hat_k (predicted measurement): {z_hat_k.shape}\n{z_hat_k}")
+        # print(f"\nH_k_t (Jacobian): {H_k_t.shape}\n{H_k_t}")
+        # print(f"\nH_k_t (Jacobian) transposed: {H_k_t.T.shape}\n{H_k_t.T}")
+        # print(f"\nSigma_t (covariance matrix): {Sigma_t.shape}\n{Sigma_t}")
+        # print(f"measurement_noise: {measurement_noise.shape}\n{measurement_noise}")
 
         Psi_k = H_k_t @ Sigma_t @ H_k_t.T + measurement_noise
         pi_k = (z_i - z_hat_k).T @ np.linalg.inv(Psi_k) @ (z_i - z_hat_k)
