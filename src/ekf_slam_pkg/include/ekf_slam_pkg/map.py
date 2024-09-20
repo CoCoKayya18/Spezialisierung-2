@@ -39,8 +39,8 @@ class Map:
 
         # As i am not using any signatures for the landmark, the H matrix gets reduced
         H_k_t = (1 / q_k) * np.array([
-            [np.sqrt(q_k) * delta_k[0], -np.sqrt(q_k) * delta_k[1], 0, -np.sqrt(q_k) * delta_k[0], np.sqrt(q_k) * delta_k[1]],
-            [delta_k[1], delta_k[0], -1, -delta_k[1], -delta_k[0]]
+            [np.sqrt(q_k) * delta_k[0].item(), -np.sqrt(q_k) * delta_k[1].item(), 0, -np.sqrt(q_k) * delta_k[0].item(), np.sqrt(q_k) * delta_k[1].item()],
+            [delta_k[1].item(), delta_k[0].item(), -1, -delta_k[1].item(), -delta_k[0].item()]
         ]) @ F_x_k
 
         return H_k_t
