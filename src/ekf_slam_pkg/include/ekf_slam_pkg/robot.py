@@ -49,7 +49,7 @@ class Robot:
 
         self.current_vel = self.utils.transform_odometry_to_world(msg)
 
-        ekf_predicted_pose, ekf_predicted_covariance = self.ekf_slam.predict(self.current_vel, self.current_pose)  # Run the EKF prediction
+        ekf_predicted_pose, ekf_predicted_covariance = self.ekf_slam.predict(self.current_vel, self.current_pose, self.covariance)  # Run the EKF prediction
         
         self.state = ekf_predicted_pose
         self.covariance = ekf_predicted_covariance

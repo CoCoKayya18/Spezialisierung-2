@@ -9,7 +9,7 @@ class Map:
         self.alpha = 5.991 # 95% confidence based on Chi-squared distribution
         rospy.loginfo("Map class initialized")
 
-    def add_landmark_estimates(self, x, y, theta, z_i):
+    def calculate_landmark_estimates(self, x, y, theta, z_i):
         """
         Update the landmark estimates given the robot's current pose and the observation.
         """
@@ -19,16 +19,19 @@ class Map:
         return mu_N_plus_1_x, mu_N_plus_1_y
 
     def compute_F_x_k(self, num_landmarks, k):
-        """
-        Computes the F_x,k matrix for the k-th landmark.
-        """
-        state_dim = 3 + 2 * num_landmarks
-        F_x_k = np.zeros((5, state_dim))
-        F_x_k[:3, :3] = np.eye(3)
-        landmark_index = 3 + 2 * (k - 1)
-        F_x_k[3:, landmark_index:landmark_index + 2] = np.eye(2)
+    
+         # Total state size: 3 for robot pose + 2 * n_landmarks for landmarks
+        state_size = 3 + 2 * num_landmarks  # This ensures the matrix is wide enough to include the robot + landmarks
 
-        # print(f"\n F_x_k (F-Matrix): {F_x_k.shape}\n{F_x_k}")
+        # Initialize F_x_k as a zeros matrix of size (5, state_size)
+        F_x_k = np.zeros((5, state_size))
+
+        # Add the 3x3 identity matrix for the robot's pose (x, y, theta)
+        F_x_k[:3, :3] = np.eye(3)
+
+        # Add the 2x2 identity matrix for the specific landmark `k`
+        landmark_offset = 3 + 2 * (k - 1)  # Landmark's position in the state vector
+        F_x_k[3:, landmark_offset:landmark_offset + 2] = np.eye(2)
 
         return F_x_k
 
@@ -41,7 +44,9 @@ class Map:
         H_k_t = (1 / q_k) * np.array([
             [np.sqrt(q_k) * delta_k[0].item(), -np.sqrt(q_k) * delta_k[1].item(), 0, -np.sqrt(q_k) * delta_k[0].item(), np.sqrt(q_k) * delta_k[1].item()],
             [delta_k[1].item(), delta_k[0].item(), -1, -delta_k[1].item(), -delta_k[0].item()]
-        ]) @ F_x_k
+        ]) 
+
+        H_k_t = H_k_t @ F_x_k
 
         return H_k_t
 
@@ -58,7 +63,7 @@ class Map:
         # print(f"\nH_k_t (Jacobian): {H_k_t.shape}\n{H_k_t}")
         # print(f"\nH_k_t (Jacobian) transposed: {H_k_t.T.shape}\n{H_k_t.T}")
         # print(f"\nSigma_t (covariance matrix): {Sigma_t.shape}\n{Sigma_t}")
-        # print(f"measurement_noise: {measurement_noise.shape}\n{measurement_noise}")
+        # print(f"\nmeasurement_noise: {measurement_noise.shape}\n{measurement_noise}")
 
         Psi_k = H_k_t @ Sigma_t @ H_k_t.T + measurement_noise
         pi_k = (z_i - z_hat_k).T @ np.linalg.inv(Psi_k) @ (z_i - z_hat_k)
