@@ -14,7 +14,9 @@ class Robot:
 
         self.covariance = np.eye(3)
         self.num_landmarks = 0 
-        self.state = [config['initial_position']['x'], config['initial_position']['y'], config['initial_position']['theta']]
+        self.state = np.array([[config['initial_position']['x']], 
+                       [config['initial_position']['y']], 
+                       [config['initial_position']['theta']]])
 
         self.ekf_slam = ekf_slam
         self.utils = utils
