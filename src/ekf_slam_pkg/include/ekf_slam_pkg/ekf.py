@@ -71,190 +71,215 @@ class EKFSLAM:
         self.state = currentPosition
         self.covariance = currentCovariance       
 
-        # Structured print statement for self.state (currentPosition)
-        print("\n=== Updated State Vector (self.state) ===")
-        print(f"Shape: {self.state.shape}")
-        print(f"State Vector:\n{self.state}")
-
-        # Structured print statement for self.covariance (currentCovariance)
-        print("\n=== Updated Covariance Matrix (self.covariance) ===")
-        print(f"Shape: {self.covariance.shape}")
-        print(f"Covariance Matrix:\n{self.covariance}")
+        # print("\n=== State Vector after prediction(self.state) ===")
+        # print(f"Shape: {self.state.shape}")
+        # print(f"State Vector:\n{self.state}")
+        
+        # print("\n=== Covariance Matrix after prediction(self.covariance) ===")
+        # print(f"Shape: {self.covariance.shape}")
+        # print(f"Covariance Matrix:\n{self.covariance}")
 
         return self.state, self.covariance
 
+
     def correct(self, scanMessage, currentStateVector, currentCovarianceMatrix):
 
-        x = currentStateVector[0].item()
-        y = currentStateVector[1].item()
-        theta = currentStateVector[2].item()
+        self.state = currentStateVector
+        self.covariance = currentCovarianceMatrix
+        
+        x = self.state[0].item()
+        y = self.state[1].item()
+        theta = self.state[2].item()
 
-        # Structured print statement for self.state (currentPosition)
-        print("\n=== currentStateVector (currentStateVectorcurrentStateVector) ===")
-        print(f"Shape: {currentStateVector.shape}")
-        print(f"currentStateVector:\n{currentStateVector}")
-
-        # Structured print statement for self.covariance (currentCovariance)
-        print("\n=== currentCovarianceMatrix (currentCovarianceMatrix) ===")
-        print(f"Shape: {currentCovarianceMatrix.shape}")
-        print(f"currentCovarianceMatrix:\n{currentCovarianceMatrix}")
-
-        # EKF update step
+        # Feature Extraction Step
         z_t = self.sensor.extract_features_from_scan(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment)
+            
+        # Start observation loop
 
-        # Lists to store Kalman gains and H_k matrices
-        K_list = []
-        H_list = []
+        observation_counter = 0
+
+        kalman_gain_list = []
+        best_z_hat_list = []
+        best_H_Matrix_list = []
 
         for z_i in z_t:
-            
-            z_i = np.array(z_i)
-            
-            # Add new Landmark
+
+            observation_counter += 1
+
+            # intialize new landmark and create tempoprary state and covariance matrices
             newLandmark_x, newLandmark_y = self.map.calculate_landmark_estimates(x, y, theta, z_i)
             new_landmark = np.array([newLandmark_x, newLandmark_y])
+
+            print(f"new_landmark coordinate X: {newLandmark_x}")
+            print(f"new_landmark coordinate Y: {newLandmark_y}")
+            print(f"new_landmark coordinates: {new_landmark}")
 
             # Create temporary state and covariance matrix with the landmark in it
 
             tempState = np.pad(self.state, ((0, 2),(0,0)), mode='constant', constant_values=new_landmark)
 
-            # print("\n=== Temp State (with new landmark added) ===")
-            # print(f"Shape: {tempState.shape}")
-            # print(f"Temp State:\n{tempState}")
+            n = self.covariance.shape[0]
 
-            n = currentCovarianceMatrix.shape[0]
             tempCovariance = np.zeros((n + 2, n + 2))
             tempCovariance[:n, :n] = self.covariance
             initial_landmark_uncertainty = 1000
             tempCovariance[n:, n:] = np.array([[initial_landmark_uncertainty, 0],
                                             [0, initial_landmark_uncertainty]])
-            
-            # print("\n=== Temp Covariance (expanded for new landmark) ===")
+
+            # Temporarily adjust landmark number too
+            temp_num_landmarks = self.num_landmarks + 1
+
+            # print(f"\n Current obs loop: {observation_counter}")
+
+            # print("\n--- Current Loop Variables ---")
+            # print(f"Current number of landmarks: {self.num_landmarks}")
+            # print(f"Temporary number of landmarks: {temp_num_landmarks}")
+
+            # # Print the covariance matrix before expanding
+            # print("\n=== Current Covariance Matrix (Before Expanding for New Landmark) ===")
+            # print(f"Shape: {currentCovarianceMatrix.shape}")
+            # print(f"Covariance Matrix:\n{currentCovarianceMatrix}")
+
+            # Print the expanded covariance matrix
+            # print("\n=== Temporary Covariance Matrix (Expanded for New Landmark) ===")
             # print(f"Shape: {tempCovariance.shape}")
-            # print(f"Temp Covariance:\n{tempCovariance}")
+            # print(f"Temp Covariance Matrix:\n{tempCovariance}")
 
-            # Lists to store variables for all landmarks
-            F_x_k_list = []
-            H_k_list = []
-            Psi_k_list = []
-            pi_k_list = []
+            # # Print the uncertainty initialization for the new landmark
+            # print("\n=== Initial Uncertainty for New Landmark ===")
+            # print(f"Initial uncertainty value: {initial_landmark_uncertainty}")
+            # print(f"New landmark uncertainty block:\n{tempCovariance[n:, n:]}")
 
-            if self.num_landmarks == 0:
-                # Initialize the state and covariance for the first landmark
-                # print("Initializing the first landmark")
-                self.state = tempState  # Assuming tempState includes the first landmark
-                self.covariance = tempCovariance
-                self.num_landmarks += 1
-                print("\n=== Updated State Vector (self.state) ===")
-                print(f"Shape: {self.state.shape}")
-                print(f"State Vector:\n{self.state}")
+            # Start landmark loop
 
-                # Structured print statement for self.covariance (currentCovariance)
-                print("\n=== Updated Covariance Matrix (self.covariance) ===")
-                print(f"Shape: {self.covariance.shape}")
-                print(f"Covariance Matrix:\n{self.covariance}")
+            landmark_counter = 0
 
-            else:
-            # Iterate through observed landmarks
-                for k in range(1, self.num_landmarks + 1):
-                    
-                    delta_k = np.array([newLandmark_x - x, newLandmark_y - y])
+            H_matrix_list = []
+            psi_list = []
+            pi_list = []
+            z_hat_list = []
 
-                    # print("\n=== delta_k (difference between landmark and robot position) ===")
-                    # print("delta_k (shape: {}):\n{}".format(delta_k.shape, delta_k))
-                    
-                    q_k = np.dot(delta_k.T, delta_k).item()
+            for k in range(1, temp_num_landmarks + 1):
 
-                    # print("\n=== q_k (squared distance between robot and landmark) ===")
-                    # print("q_k (value):\n{}".format(q_k))
-                    
-                    z_hat_k = np.array([np.sqrt(q_k), np.arctan2(delta_k[1].item(), delta_k[0].item()) - theta])
+                landmark_counter += 1
+                
+                delta_k = np.array([newLandmark_x - x, newLandmark_y - y])
+                
+                q_k = np.dot(delta_k.T, delta_k).item()
+                
+                z_hat_k = np.array([np.sqrt(q_k), np.arctan2(delta_k[1].item(), delta_k[0].item()) - theta])
 
-                    # print("\n=== z_hat_k (predicted measurement in range and bearing) ===")
-                    # print("z_hat_k (shape: {}):\n{}".format(z_hat_k.shape, z_hat_k))
+                # Compute F_x,k matrix
+                F_x_k = self.map.compute_F_x_k(temp_num_landmarks, k)
+                # Print F_x_k matrix for the current iteration
+                # print(f"\n=== F_x_k Matrix (for Observation {obs_counter}, Landmark {lm_counter}) ===")
+                # print(f"Shape: {F_x_k.shape}")
+                # print(f"F_x_k:\n{F_x_k}")
 
-                    # Compute F_x,k matrix
-                    F_x_k = self.map.compute_F_x_k(self.num_landmarks, k)
-                    # print("\n=== F_x_k (state transition matrix for this landmark) ===")
-                    # print("F_x_k (shape: {}):\n{}".format(F_x_k.shape, F_x_k))
+                # Print current covariance (self.covariance)
+                # print(f"\n=== Covariance Matrix (currentCovarianceMatrix) Before Kalman Gain (for Observation {observation_counter}, Landmark {landmark_counter}) ===")
+                # print(f"Shape: {currentCovarianceMatrix.shape}")
+                # print(f"Covariance Matrix:\n{currentCovarianceMatrix}")
 
-                    # Compute H^k_t matrix
-                    H_k_t = self.map.compute_H_k_t(delta_k, q_k, F_x_k)
-                    # print("\n=== H_k_t (measurement Jacobian matrix) ===")
-                    # print("H_k_t (shape: {}):\n{}".format(H_k_t.shape, H_k_t))
+                # Compute H^k_t matrix
+                H_k_t = self.map.compute_H_k_t(delta_k, q_k, F_x_k)
+                
+                # Print H_k_t matrix for the current iteration
+                # print(f"\n=== H_k_t Matrix (for Observation {obs_counter}, Landmark {lm_counter}) ===")
+                # print(f"Shape: {H_k_t.shape}")
+                # print(f"H_k_t:\n{H_k_t}")
 
-                    # Compute Mahalanobis distance
-                    pi_k, Psi_k = self.map.compute_mahalanobis_distance(z_i, z_hat_k, H_k_t, tempCovariance, self.measurement_noise)
+                # Compute Mahalanobis distance
+                pi_k, Psi_k = self.map.compute_mahalanobis_distance(z_i, z_hat_k, H_k_t, tempCovariance, self.measurement_noise)
 
-                    # print("\n=== pi_k (Mahalanobis distance) ===")
-                    # print("pi_k (value):\n{}".format(pi_k))
+                # Add the calculated values to the list
+                H_matrix_list.append(H_k_t)
+                psi_list.append(Psi_k)
+                pi_list.append(pi_k)
+                z_hat_list.append(z_hat_k)
+            
+            # End Landmark Loop
 
-                    # print("\n=== Psi_k (innovation covariance matrix) ===")
-                    # print("Psi_k (shape: {}):\n{}".format(Psi_k.shape, Psi_k))
+            # Set the added landmarks pi to the alpha value by hand
+            pi_list[-1] = self.alpha
 
-                    # Store the computed values in lists
-                    F_x_k_list.append(F_x_k)
-                    H_k_list.append(H_k_t)
-                    Psi_k_list.append(Psi_k)
-                    pi_k_list.append(pi_k)
+            j_i = min(pi_list)
+            best_landmark_index = pi_list.index(j_i)
 
-            pi_k_list.append(self.alpha)
-            j_i = min(pi_k_list)
-            best_landmark_index = pi_k_list.index(j_i)
-
-            # print(f"H_k_list size: {len(H_k_list)}")
-            # print(f"best_landmark_index: {best_landmark_index}")
+            # print(f"best landmark index: {best_landmark_index}")
 
             # Check if a new landmark is being added
             if best_landmark_index >= self.num_landmarks:
+
+                print("\n ADDING NEW LANDMARK")
 
                 # Update state vector to include the new landmark
                 self.state = tempState
                 self.covariance = tempCovariance
 
                 # Update the number of landmarks
-                self.num_landmarks += 1
+                self.num_landmarks = temp_num_landmarks
 
-                H_k_t = H_k_list[best_landmark_index]
-                # print(f"H_k_t for best_landmark_index {best_landmark_index}: {H_k_t}")
-                # print(f"H_k_t before best_landmark_index {best_landmark_index - 1}: {H_k_t}")
+                best_H_matrix = H_matrix_list[best_landmark_index]
+                best_z_hat = z_hat_list[best_landmark_index]
 
             else:
                 # Measurement is associated with an existing landmark
                 # Truncate the H matrix to prevent dimension mismatch
-                H_k_t = H_k_list[best_landmark_index]
-                H_k_t = H_k_t[:, :self.num_landmarks * 2 + 3]  # Truncate H matrix
+                best_H_matrix = H_matrix_list[best_landmark_index]
+                best_H_matrix = best_H_matrix[:, :self.num_landmarks * 2 + 3]  # Truncate H matrix
+                best_z_hat = z_hat_list[best_landmark_index]
 
-            # print(f"CovarianceMatrix shape: {self.covariance.shape}")
-            # print(f"H_k_t shape: {H_k_t.shape}")
-            # print(f"H_k_t.T shape: {H_k_t.T.shape}")
-            # print(f"Psi_k_list[best_landmark_index] shape: {Psi_k_list[best_landmark_index].shape}")
+                temp_num_landmarks -= 1
             
-            # Compute the Kalman gain
-            K_t_i = self.covariance @ H_k_t.T @ np.linalg.inv(Psi_k_list[best_landmark_index])
+            # Add both variables to the list for later
+            best_H_Matrix_list.append(best_H_matrix)
+            best_z_hat_list.append(best_z_hat)
+                
+            # Calculte Kalman gain and att it to the list
+            Kalman_gain = self.covariance @ best_H_matrix.T @ np.linalg.inv(psi_list[best_landmark_index])
+            kalman_gain_list.append(Kalman_gain)
+        
+        # end of observation loop    
+        
+        print("\n=== State Vector after correction(self.state) ===")
+        print(f"Shape: {self.state.shape}")
+        print(f"State Vector:\n{self.state}")
+        
+        print("\n=== Covariance Matrix after correction(self.covariance) ===")
+        print(f"Shape: {self.covariance.shape}")
+        print(f"Covariance Matrix:\n{self.covariance}")
+        
+        updateStateSum = np.zeros_like(self.state)
+        updateCovarianceSum = np.zeros_like(self.covariance)
 
-            # Store Kalman gain and H_k_t for final summation later
-            K_list.append(K_t_i)
-            H_list.append(H_k_t)
+        for i, K_t_i in enumerate(kalman_gain_list):
 
-            # Final Summation: Apply the cumulative update for both state and covariance
-            updateStateSum = np.zeros_like(self.state)
-            updateCovarianceSum = np.zeros_like(self.covariance)
+            measurement_residual = z_t[i] - best_z_hat_list[i]
 
-            for i, K_t_i in enumerate(K_list):
-                # Recompute state vector size before applying updates
-                measurement_residual = z_t[i] - (H_list[i] @ self.state[:len(H_list[i][0])])
-                updateStateSum += K_t_i @ measurement_residual
-                updateCovarianceSum += K_t_i @ H_list[i]
+            measurement_residual = measurement_residual.reshape(-1, 1)
 
-            # Update state mean and covariance
-            self.state = self.state + updateStateSum
-            self.state[2] = self.utils.wrap_angle(self.state[2])  # Normalize the orientation angle
-            self.covariance = self.covariance - updateCovarianceSum @ self.covariance
+            # print(f"\nIteration in summation{i}:")
 
-            # Print updated number of landmarks
-            print(f"Landmark Numbers: {self.num_landmarks}")
+            # print(f"K_t_i shape: {K_t_i.shape}")
+            # print(f"K_t_i dim: {K_t_i.ndim}")
+            # print(f"K_t_i:\n{K_t_i}")
+            
+            # print(f"Measurement Residual shape: {measurement_residual.shape}")
+            # print(f"Measurement Dimension: {measurement_residual.ndim}")
+            # print(f"Measurement Residual:\n{measurement_residual}")
 
-        return self.state, self.covariance
+            # print(f"UpdateStateSum shape before update: {updateStateSum.shape}")
+            # print(f"UpdateStateSum shape before update: {updateStateSum.ndim}")
+            # print(f"UpdateStateSum before update:\n{updateStateSum}")
 
+            updateStateSum += K_t_i @ measurement_residual
+            updateCovarianceSum += K_t_i @ best_H_Matrix_list[i]
+
+        self.state += updateStateSum
+        self.state[2] = self.utils.wrap_angle(self.state[2])  # Normalize the orientation angle
+        self.covariance = (np.eye(updateCovarianceSum.shape[0]) - updateCovarianceSum) @ self.covariance
+
+        return self.state, self.covariance, self.num_landmarks
+    
 

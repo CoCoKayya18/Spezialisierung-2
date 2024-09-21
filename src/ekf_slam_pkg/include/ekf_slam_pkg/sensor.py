@@ -53,6 +53,8 @@ class Sensor:
                 features.append(tuple(cluster_center))
             
             self.visualize_features(valid_points, labels, features)
+
+            print(f"\n Following features detected: {features}")
             
             return features
 
