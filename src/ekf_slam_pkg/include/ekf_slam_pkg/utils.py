@@ -29,7 +29,7 @@ class Utils:
 
         return pose
 
-    def wrap_angle(angle):
+    def wrap_angle(self, angle):
         # Wrap angle between -pi and pi
         return (angle + np.pi) % (2 * np.pi) - np.pi
 

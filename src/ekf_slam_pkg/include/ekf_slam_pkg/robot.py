@@ -23,9 +23,9 @@ class Robot:
         rospy.loginfo("Robot class initialized")
 
         # Publishers and subscribers
-        self.odom_sub = rospy.Subscriber('/odom', Odometry, self.odom_callback)
-        self.laser_sub = rospy.Subscriber('/scan', LaserScan, self.scan_callback)
-        self.ground_truth_sub = rospy.Subscriber('/ground_truth/state', Odometry, self.ground_truth_callback)
+        self.odom_sub = rospy.Subscriber('/odom', Odometry, self.odom_callback, queue_size=1)
+        self.laser_sub = rospy.Subscriber('/scan', LaserScan, self.scan_callback, queue_size=1)
+        self.ground_truth_sub = rospy.Subscriber('/ground_truth/state', Odometry, self.ground_truth_callback, queue_size=1)
 
         self.GT_path_pub = rospy.Publisher('/Ground_Truth_Path', Marker, queue_size=10)
         self.EKF_path_pub = rospy.Publisher('/EKF_Path', Marker, queue_size=10)
@@ -53,6 +53,14 @@ class Robot:
         
         self.state = ekf_predicted_pose
         self.covariance = ekf_predicted_covariance
+
+        # print("\n=== State Vector after prediction in robot (self.state) ===")
+        # print(f"Shape: {self.state.shape}")
+        # print(f"State Vector:\n{self.state}")
+        
+        # print("\n=== Covariance Matrix after prediction in robot (self.covariance) ===")
+        # print(f"Shape: {self.covariance.shape}")
+        # print(f"Covariance Matrix:\n{self.covariance}")
         
         self.ekf_path.append(ekf_predicted_pose)
         self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
@@ -61,15 +69,32 @@ class Robot:
         # self.utils.save_odom_velocities_to_csv(msg)
 
     def scan_callback(self, msg):
-        self.scan_message = msg
-        
-        ekf_corrected_pose, ekf_corrected_covariance = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
 
-        self.position = ekf_corrected_pose
+        try:
+            self.scan_message = msg
+            
+            ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
+
+            self.state = ekf_corrected_pose
+            self.covariance = ekf_corrected_covariance
+            self.num_landmarks = num_landmarks
+
+            # print("\n=== State Vector after correction in robot (self.state) ===")
+            # print(f"Shape: {self.state.shape}")
+            # print(f"State Vector:\n{self.state}")
+            
+            # print("\n=== Covariance Matrix after correction in robot (self.covariance) ===")
+            # print(f"Shape: {self.covariance.shape}")
+            # print(f"Covariance Matrix:\n{self.covariance}")
         
-        self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
-        self.ekf_path.append(ekf_corrected_pose)
-        self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Red path
+            self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
+            self.ekf_path.append(ekf_corrected_pose)
+            self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Red path
+        
+        except Exception as e:
+            rospy.logerr(f"Exception raised: {e}")
+            
+
 
     def ground_truth_callback(self, msg):
         self.ground_truth_path.append(msg.pose.pose)
