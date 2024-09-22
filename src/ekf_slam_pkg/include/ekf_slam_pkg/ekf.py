@@ -1,6 +1,9 @@
 import numpy as np
+import rospy
 import pickle
 import rospy
+import threading
+import time
 from geometry_msgs.msg import Pose
 from tf.transformations import euler_from_quaternion
 from tf.transformations import quaternion_from_euler
@@ -13,6 +16,8 @@ class EKFSLAM:
         self.map = map
         self.config = config
         self.utils = utils
+
+        self.lock = threading.Lock() # Thread lock so predict and correct dont collide
 
         self.covariance = np.eye(3)
         self.num_landmarks = 0 
@@ -43,243 +48,362 @@ class EKFSLAM:
     # EKF prediction step
     def predict(self, currentVel, currentPosition, currentCovariance):
 
-        currentVel = np.array(currentVel).reshape(1, -1)  # Ensure it has the shape (1, 3)
+        with self.lock:
 
-        # Scale the input data correctly
-        odomVelScaled = self.scaler_X.transform(currentVel)
+            currentVel = np.array(currentVel).reshape(1, -1)  # Ensure it has the shape (1, 3)
 
-        # Predict using the loaded model and the standardized data
-        y_predict_mean, y_predict_variance = self.model.predict(odomVelScaled)
+            # Scale the input data correctly
+            odomVelScaled = self.scaler_X.transform(currentVel)
 
-        predictedDelta = self.scaler_Y.inverse_transform(y_predict_mean)
-        predicted_covariance = np.diag(np.full(3, y_predict_variance[0]))
+            # Predict using the loaded model and the standardized data
+            y_predict_mean, y_predict_variance = self.model.predict(odomVelScaled)
 
-        ' Resize the F_x matrix to adjust for the landmarks too'
-        state_vector_size = 3 + 2 * self.num_landmarks
-        F_x = np.zeros((state_vector_size, state_vector_size))
+            predictedDelta = self.scaler_Y.inverse_transform(y_predict_mean)
+            predicted_covariance = np.diag(np.full(3, y_predict_variance[0]))
 
-        # The top-left 3x3 block is the identity matrix that updates the robot's pose
-        F_x[0, 0] = 1  # x -> x
-        F_x[1, 1] = 1  # y -> y
-        F_x[2, 2] = 1
+            ' Resize the F_x matrix to adjust for the landmarks too'
+            state_vector_size = 3 + 2 * self.num_landmarks
+            F_x = np.zeros((state_vector_size, state_vector_size))
 
-        predictedDelta = np.array(currentVel).reshape(-1, 1)
-        currentPosition[:3] += self.F_x.T @ predictedDelta
-        currentCovariance[:3, :3] +=  predicted_covariance + self.F_x.T @ self.process_noise @ self.F_x
+            # The top-left 3x3 block is the identity matrix that updates the robot's pose
+            F_x[0, 0] = 1  # x -> x
+            F_x[1, 1] = 1  # y -> y
+            F_x[2, 2] = 1
 
-        # Update state
-        self.state = currentPosition
-        self.covariance = currentCovariance       
+            predictedDelta = np.array(currentVel).reshape(-1, 1)
+            currentPosition[:3] += self.F_x.T @ predictedDelta
+            currentCovariance[:3, :3] +=  predicted_covariance + self.F_x.T @ self.process_noise @ self.F_x
 
-        # print("\n=== State Vector after prediction(self.state) ===")
-        # print(f"Shape: {self.state.shape}")
-        # print(f"State Vector:\n{self.state}")
-        
-        # print("\n=== Covariance Matrix after prediction(self.covariance) ===")
-        # print(f"Shape: {self.covariance.shape}")
-        # print(f"Covariance Matrix:\n{self.covariance}")
+            # Update state
+            self.state = currentPosition
+            self.covariance = currentCovariance       
 
-        return self.state, self.covariance
+            rospy.loginfo("\n=== State Vector after prediction(self.state) ===")
+            rospy.loginfo(f"Shape: {self.state.shape}")
+            rospy.loginfo(f"State Vector:\n{self.state}")
+            
+            rospy.loginfo("\n=== Covariance Matrix after prediction(self.covariance) ===")
+            rospy.loginfo(f"Shape: {self.covariance.shape}")
+            rospy.loginfo(f"Covariance Matrix:\n{self.covariance}")
+
+            rospy.loginfo("\n === PREDICTION RUNNING ====== PREDICTION RUNNING ======")
+
+            return self.state, self.covariance
 
 
     def correct(self, scanMessage, currentStateVector, currentCovarianceMatrix):
 
-        self.state = currentStateVector
-        self.covariance = currentCovarianceMatrix
-        
-        x = self.state[0].item()
-        y = self.state[1].item()
-        theta = self.state[2].item()
+        rospy.loginfo("\n === CORRECTION BEGINNING ====== CORRECTION BEGINNING ======")
 
-        # Feature Extraction Step
-        z_t = self.sensor.extract_features_from_scan(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment)
+        start_time = time.time()
+
+        with self.lock:
+
+            self.state = currentStateVector
+            self.covariance = currentCovarianceMatrix
+
+            rospy.loginfo("\n === State Vector before correction(self.state) ===")
+            rospy.loginfo(f"\n Shape: {self.state.shape}")
+            rospy.loginfo(f"\n State Vector:\n{self.state}")
             
-        # Start observation loop
-
-        observation_counter = 0
-
-        kalman_gain_list = []
-        best_z_hat_list = []
-        best_H_Matrix_list = []
-
-        for z_i in z_t:
-
-            observation_counter += 1
-
-            # intialize new landmark and create tempoprary state and covariance matrices
-            newLandmark_x, newLandmark_y = self.map.calculate_landmark_estimates(x, y, theta, z_i)
-            new_landmark = np.array([newLandmark_x, newLandmark_y])
-
-            print(f"new_landmark coordinate X: {newLandmark_x}")
-            print(f"new_landmark coordinate Y: {newLandmark_y}")
-            print(f"new_landmark coordinates: {new_landmark}")
-
-            # Create temporary state and covariance matrix with the landmark in it
-
-            tempState = np.pad(self.state, ((0, 2),(0,0)), mode='constant', constant_values=new_landmark)
-
-            n = self.covariance.shape[0]
-
-            tempCovariance = np.zeros((n + 2, n + 2))
-            tempCovariance[:n, :n] = self.covariance
-            initial_landmark_uncertainty = 1000
-            tempCovariance[n:, n:] = np.array([[initial_landmark_uncertainty, 0],
-                                            [0, initial_landmark_uncertainty]])
-
-            # Temporarily adjust landmark number too
-            temp_num_landmarks = self.num_landmarks + 1
-
-            # print(f"\n Current obs loop: {observation_counter}")
-
-            # print("\n--- Current Loop Variables ---")
-            # print(f"Current number of landmarks: {self.num_landmarks}")
-            # print(f"Temporary number of landmarks: {temp_num_landmarks}")
-
-            # # Print the covariance matrix before expanding
-            # print("\n=== Current Covariance Matrix (Before Expanding for New Landmark) ===")
-            # print(f"Shape: {currentCovarianceMatrix.shape}")
-            # print(f"Covariance Matrix:\n{currentCovarianceMatrix}")
-
-            # Print the expanded covariance matrix
-            # print("\n=== Temporary Covariance Matrix (Expanded for New Landmark) ===")
-            # print(f"Shape: {tempCovariance.shape}")
-            # print(f"Temp Covariance Matrix:\n{tempCovariance}")
-
-            # # Print the uncertainty initialization for the new landmark
-            # print("\n=== Initial Uncertainty for New Landmark ===")
-            # print(f"Initial uncertainty value: {initial_landmark_uncertainty}")
-            # print(f"New landmark uncertainty block:\n{tempCovariance[n:, n:]}")
-
-            # Start landmark loop
-
-            landmark_counter = 0
-
-            H_matrix_list = []
-            psi_list = []
-            pi_list = []
-            z_hat_list = []
-
-            for k in range(1, temp_num_landmarks + 1):
-
-                landmark_counter += 1
-                
-                delta_k = np.array([newLandmark_x - x, newLandmark_y - y])
-                
-                q_k = np.dot(delta_k.T, delta_k).item()
-                
-                z_hat_k = np.array([np.sqrt(q_k), np.arctan2(delta_k[1].item(), delta_k[0].item()) - theta])
-
-                # Compute F_x,k matrix
-                F_x_k = self.map.compute_F_x_k(temp_num_landmarks, k)
-                # Print F_x_k matrix for the current iteration
-                # print(f"\n=== F_x_k Matrix (for Observation {obs_counter}, Landmark {lm_counter}) ===")
-                # print(f"Shape: {F_x_k.shape}")
-                # print(f"F_x_k:\n{F_x_k}")
-
-                # Print current covariance (self.covariance)
-                # print(f"\n=== Covariance Matrix (currentCovarianceMatrix) Before Kalman Gain (for Observation {observation_counter}, Landmark {landmark_counter}) ===")
-                # print(f"Shape: {currentCovarianceMatrix.shape}")
-                # print(f"Covariance Matrix:\n{currentCovarianceMatrix}")
-
-                # Compute H^k_t matrix
-                H_k_t = self.map.compute_H_k_t(delta_k, q_k, F_x_k)
-                
-                # Print H_k_t matrix for the current iteration
-                # print(f"\n=== H_k_t Matrix (for Observation {obs_counter}, Landmark {lm_counter}) ===")
-                # print(f"Shape: {H_k_t.shape}")
-                # print(f"H_k_t:\n{H_k_t}")
-
-                # Compute Mahalanobis distance
-                pi_k, Psi_k = self.map.compute_mahalanobis_distance(z_i, z_hat_k, H_k_t, tempCovariance, self.measurement_noise)
-
-                # Add the calculated values to the list
-                H_matrix_list.append(H_k_t)
-                psi_list.append(Psi_k)
-                pi_list.append(pi_k)
-                z_hat_list.append(z_hat_k)
+            rospy.loginfo("\n === Covariance Matrix before correction(self.covariance) ===")
+            rospy.loginfo(f"\n Shape: {self.covariance.shape}")
+            rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
             
-            # End Landmark Loop
+            x = self.state[0].item()
+            y = self.state[1].item()
+            theta = self.state[2].item()
 
-            # Set the added landmarks pi to the alpha value by hand
-            pi_list[-1] = self.alpha
-
-            j_i = min(pi_list)
-            best_landmark_index = pi_list.index(j_i)
-
-            # print(f"best landmark index: {best_landmark_index}")
-
-            # Check if a new landmark is being added
-            if best_landmark_index >= self.num_landmarks:
-
-                print("\n ADDING NEW LANDMARK")
-
-                # Update state vector to include the new landmark
-                self.state = tempState
-                self.covariance = tempCovariance
-
-                # Update the number of landmarks
-                self.num_landmarks = temp_num_landmarks
-
-                best_H_matrix = H_matrix_list[best_landmark_index]
-                best_z_hat = z_hat_list[best_landmark_index]
-
-            else:
-                # Measurement is associated with an existing landmark
-                # Truncate the H matrix to prevent dimension mismatch
-                best_H_matrix = H_matrix_list[best_landmark_index]
-                best_H_matrix = best_H_matrix[:, :self.num_landmarks * 2 + 3]  # Truncate H matrix
-                best_z_hat = z_hat_list[best_landmark_index]
-
-                temp_num_landmarks -= 1
-            
-            # Add both variables to the list for later
-            best_H_Matrix_list.append(best_H_matrix)
-            best_z_hat_list.append(best_z_hat)
+            # Feature Extraction Step
+            z_t = self.sensor.extract_features_from_scan(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment)
                 
-            # Calculte Kalman gain and att it to the list
-            Kalman_gain = self.covariance @ best_H_matrix.T @ np.linalg.inv(psi_list[best_landmark_index])
-            kalman_gain_list.append(Kalman_gain)
-        
-        # end of observation loop    
-        
-        print("\n=== State Vector after correction(self.state) ===")
-        print(f"Shape: {self.state.shape}")
-        print(f"State Vector:\n{self.state}")
-        
-        print("\n=== Covariance Matrix after correction(self.covariance) ===")
-        print(f"Shape: {self.covariance.shape}")
-        print(f"Covariance Matrix:\n{self.covariance}")
-        
-        updateStateSum = np.zeros_like(self.state)
-        updateCovarianceSum = np.zeros_like(self.covariance)
+            # Start observation loop
 
-        for i, K_t_i in enumerate(kalman_gain_list):
+            observation_counter = 0
 
-            measurement_residual = z_t[i] - best_z_hat_list[i]
+            kalman_gain_list = []
+            best_z_hat_list = []
+            best_H_Matrix_list = []
 
-            measurement_residual = measurement_residual.reshape(-1, 1)
+            for z_i in z_t:
 
-            # print(f"\nIteration in summation{i}:")
+                observation_counter += 1
 
-            # print(f"K_t_i shape: {K_t_i.shape}")
-            # print(f"K_t_i dim: {K_t_i.ndim}")
-            # print(f"K_t_i:\n{K_t_i}")
+                rospy.loginfo("\n === State Vector in obs loop (self.state) ===")
+                rospy.loginfo(f"\n Shape: {self.state.shape}")
+                rospy.loginfo(f"\n State Vector:\n{self.state}")
+                
+                rospy.loginfo("\n === Covariance Matrix in obs loop (self.covariance) ===")
+                rospy.loginfo(f"\n Shape: {self.covariance.shape}")
+                rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
+
+                # intialize new landmark and create tempoprary state and covariance matrices
+                newLandmark_x, newLandmark_y = self.map.calculate_landmark_estimates(x, y, theta, z_i)
+                new_landmark = np.array([newLandmark_x, newLandmark_y])
+
+                # Create temporary state and covariance matrix with the landmark in it
+
+                # tempState = np.pad(self.state, ((0, 2),(0,0)), mode='constant', constant_values=new_landmark)
+                tempState = np.vstack((self.state, new_landmark.reshape(2, 1)))
+
+                n = self.covariance.shape[0]
+
+                tempCovariance = np.zeros((n + 2, n + 2))
+                tempCovariance[:n, :n] = self.covariance
+                initial_landmark_uncertainty = 1000
+                tempCovariance[n:, n:] = np.array([[initial_landmark_uncertainty, 0],
+                                                [0, initial_landmark_uncertainty]])
+
+                # Temporarily adjust landmark number too
+                temp_num_landmarks = self.num_landmarks + 1
+
+                # rospy.loginfo(f"\n Current obs loop: {observation_counter}")
+
+                # rospy.loginfo("\n === Current Loop Variables ===")
+                # rospy.loginfo(f"\n Current number of landmarks: {self.num_landmarks}")
+                # rospy.loginfo(f"\n Temporary number of landmarks: {temp_num_landmarks}")
+
+                # # rospy.loginfo the covariance matrix before expanding
+                # rospy.loginfo("\nv=== Current Covariance Matrix (Before Expanding for New Landmark) ===")
+                # rospy.loginfo(f"\n Shape: {currentCovarianceMatrix.shape}")
+                # rospy.loginfo(f"\n Covariance Matrix:\n{currentCovarianceMatrix}")
+
+                # # rospy.loginfo the expanded covariance matrix and state
+                # rospy.loginfo("\n === Temporary State Vector (Expanded for New Landmark) ===")
+                # rospy.loginfo(f"\n Shape: {tempState.shape}")
+                # rospy.loginfo(f"\n Temp State :\n{tempState}")
+
+                # rospy.loginfo("\n === Temporary Covariance Matrix (Expanded for New Landmark) ===")
+                # rospy.loginfo(f"\n Shape: {tempCovariance.shape}")
+                # rospy.loginfo(f"\n Temp Covariance Matrix:\n{tempCovariance}")
+
+
+                # # rospy.loginfo the uncertainty initialization for the new landmark
+                # rospy.loginfo("\n === Initial Uncertainty for New Landmark ===")
+                # rospy.loginfo(f"\n Initial uncertainty value: {initial_landmark_uncertainty}")
+                # rospy.loginfo(f"\n New landmark uncertainty block:\n{tempCovariance[n:, n:]}")
+
+                # Start landmark loop
+
+                landmark_counter = 0
+
+                H_matrix_list = []
+                psi_list = []
+                pi_list = []
+                z_hat_list = []
+
+                for k in range(1, temp_num_landmarks + 1):
+
+                    landmark_counter += 1
+
+                    # rospy.loginfo(f"\n Current LM loop: {landmark_counter}")
+
+                    # rospy.loginfo("\n=== State Vector in LM loop (self.state) ===")
+                    # rospy.loginfo(f"\n Shape: {self.state.shape}")
+                    # rospy.loginfo(f"\n State Vector:\n{self.state}")
+                    
+                    # rospy.loginfo("\n=== Covariance Matrix in LM loop (self.covariance) ===")
+                    # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
+                    # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
+                    
+                    delta_k = np.array([newLandmark_x - x, newLandmark_y - y])
+                    
+                    q_k = np.dot(delta_k.T, delta_k).item()
+                    
+                    z_hat_k = np.array([np.sqrt(q_k), np.arctan2(delta_k[1].item(), delta_k[0].item()) - theta])
+
+                    # rospy.loginfo("\n=== State Vector in LM loop after z_hat_k (self.state) ===")
+                    # rospy.loginfo(f"\n Shape: {self.state.shape}")
+                    # rospy.loginfo(f"\n State Vector:\n{self.state}")
+                    
+                    # rospy.loginfo("\n=== Covariance Matrix in LM loop after z_hat_k (self.covariance) ===")
+                    # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
+                    # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
+
+                    # Compute F_x,k matrix
+                    F_x_k = self.map.compute_F_x_k(temp_num_landmarks, k)
+                    
+                    # rospy.loginfo F_x_k matrix for the current iteration
+                    # rospy.loginfo(f"\n=== F_x_k Matrix (for Observation {observation_counter}, Landmark {landmark_counter}) ===")
+                    # rospy.loginfo(f"\n Shape: {F_x_k.shape}")
+                    # rospy.loginfo(f"\n F_x_k:\n{F_x_k}")
+
+                    # # rospy.loginfo current covariance (self.covariance)
+                    # rospy.loginfo(f"\n=== Covariance Matrix (currentCovarianceMatrix) Before Kalman Gain (for Observation {observation_counter}, Landmark {landmark_counter}) ===")
+                    # rospy.loginfo(f"\n Shape: {currentCovarianceMatrix.shape}")
+                    # rospy.loginfo(f"\n Covariance Matrix:\n{currentCovarianceMatrix}")
+
+                    # Compute H^k_t matrix
+                    H_k_t = self.map.compute_H_k_t(delta_k, q_k, F_x_k)
+
+                    # rospy.loginfo("\n=== State Vector in LM loop after H_k_t (self.state) ===")
+                    # rospy.loginfo(f"\n Shape: {self.state.shape}")
+                    # rospy.loginfo(f"\n State Vector:\n{self.state}")
+                    
+                    # rospy.loginfo("\n=== Covariance Matrix in LM loop after H_k_t (self.covariance) ===")
+                    # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
+                    # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
+                    
+                    # # rospy.loginfo H_k_t matrix for the current iteration
+                    # rospy.loginfo(f"\n=== H_k_t Matrix (for Observation {observation_counter}, Landmark {landmark_counter}) ===")
+                    # rospy.loginfo(f"\n Shape: {H_k_t.shape}")
+                    # rospy.loginfo(f"\n H_k_t:\n{H_k_t}")
+
+                    # Compute Mahalanobis distance
+                    pi_k, Psi_k = self.map.compute_mahalanobis_distance(z_i, z_hat_k, H_k_t, tempCovariance, self.measurement_noise)
+
+                    # Create plots for H_Matrix jacobian and Covariance matrix
+                    # self.utils.save_covariance_matrix_plot(self.covariance, observation_counter, landmark_counter)
+                    # self.utils.save_jacobian_plot(H_k_t, observation_counter, landmark_counter)
+
+                    # Add the calculated values to the list
+                    H_matrix_list.append(H_k_t)
+                    psi_list.append(Psi_k)
+                    pi_list.append(pi_k)
+                    z_hat_list.append(z_hat_k)
+
+                    # rospy.loginfo("\n === State Vector after LM loop (self.state) ===")
+                    # rospy.loginfo(f"\n Shape: {self.state.shape}")
+                    # rospy.loginfo(f"\n State Vector:\n{self.state}")
+                    
+                    # rospy.loginfo("\n === Covariance Matrix after LM loop (self.covariance) ===")
+                    # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
+                    # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
+                
+                # End Landmark Loop
+
+                # Set the added landmarks pi to the alpha value by hand
+                pi_list[-1] = self.alpha
+
+                j_i = min(pi_list)
+                best_landmark_index = pi_list.index(j_i)
+
+                # rospy.loginfo(f"\n best landmark index: {best_landmark_index}")
+
+                # Check if a new landmark is being added
+                if best_landmark_index >= self.num_landmarks:
+
+                    rospy.loginfo(f"\n ADDING NEW LANDMARK at obs {observation_counter}, landmark {landmark_counter}")
+
+                    # Update state vector to include the new landmark
+                    self.state = tempState
+                    self.covariance = tempCovariance
+
+                    # Update the number of landmarks
+                    self.num_landmarks = temp_num_landmarks
+
+                    best_H_matrix = H_matrix_list[best_landmark_index]
+                    best_z_hat = z_hat_list[best_landmark_index]
+                    
+                    # rospy.loginfo("\n=== State Vector after landmark addition(self.state) ===")
+                    # rospy.loginfo(f"\n Shape: {self.state.shape}")
+                    # rospy.loginfo(f"\n State Vector:\n{self.state}")
+                    
+                    # rospy.loginfo("\n=== Covariance Matrix after landmark addition(self.covariance) ===")
+                    # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
+                    # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
+
+                    # # rospy.loginfo H_k_t matrix for the current calculation
+                    # rospy.loginfo(f"\n=== best_H_matrix Matrix after landmark addition ===")
+                    # rospy.loginfo(f"\n Shape: {best_H_matrix.shape}")
+                    # rospy.loginfo(f"\n best_H_matrix:\n{best_H_matrix}")
+
+                else:
+                    # Measurement is associated with an existing landmark
+                    # Truncate the H matrix to prevent dimension mismatch
+
+                    best_H_matrix = H_matrix_list[best_landmark_index]
+                    best_H_matrix = best_H_matrix[:, :self.num_landmarks * 2 + 3]  # Truncate H matrix
+                    best_z_hat = z_hat_list[best_landmark_index]
+
+                    temp_num_landmarks -= 1
+                    
+                    # rospy.loginfo("\n === Running the else and reducing the states ===")
+
+                    # rospy.loginfo("\n=== State Vector after landmark subtraction(self.state) ===")
+                    # rospy.loginfo(f"\n Shape: {self.state.shape}")
+                    # rospy.loginfo(f"\n State Vector:\n{self.state}")
+                    
+                    # rospy.loginfo("\n=== Covariance Matrix after landmark subtraction(self.covariance) ===")
+                    # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
+                    # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
+
+                    # # rospy.loginfo H_k_t matrix for the current calculation
+                    # rospy.loginfo(f"\n=== best_H_matrix Matrix after landmark subtraction ===")
+                    # rospy.loginfo(f"\n Shape: {best_H_matrix.shape}")
+                    # rospy.loginfo(f"\n best_H_matrix:\n{best_H_matrix}")
+                
+                # Add both variables to the list for later
+                best_H_Matrix_list.append(best_H_matrix)
+                best_z_hat_list.append(best_z_hat)
+
+                # rospy.loginfo("\n=== State Vector before Kalman Gain Calculation(self.state) ===")
+                # rospy.loginfo(f"\n Shape: {self.state.shape}")
+                # rospy.loginfo(f"\n State Vector:\n{self.state}")
+                
+                # rospy.loginfo("\n=== Covariance Matrix before Kalman Gain Calculation(self.covariance) ===")
+                # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
+                # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
+
+                # # rospy.loginfo H_k_t matrix for the current calculation
+                # rospy.loginfo(f"\n=== best_H_matrix Matrix before Kalman Gain Calculation ===")
+                # rospy.loginfo(f"\n Shape: {best_H_matrix.shape}")
+                # rospy.loginfo(f"\n best_H_matrix:\n{best_H_matrix}")
+
+                # rospy.loginfo(f"\n=== psi_list[best_landmark_index] Matrix before Kalman Gain Calculation ===")
+                # rospy.loginfo(f"\n Shape: {psi_list[best_landmark_index].shape}")
+                # rospy.loginfo(f"\n psi_list[best_landmark_index]:\n{psi_list[best_landmark_index]}")
+                    
+                # Calculte Kalman gain and att it to the list
+                Kalman_gain = self.covariance @ best_H_matrix.T @ np.linalg.inv(psi_list[best_landmark_index])
+                kalman_gain_list.append(Kalman_gain)
             
-            # print(f"Measurement Residual shape: {measurement_residual.shape}")
-            # print(f"Measurement Dimension: {measurement_residual.ndim}")
-            # print(f"Measurement Residual:\n{measurement_residual}")
+            # end of observation loop    
+            
+            updateStateSum = np.zeros_like(self.state)
+            updateCovarianceSum = np.zeros_like(self.covariance)
 
-            # print(f"UpdateStateSum shape before update: {updateStateSum.shape}")
-            # print(f"UpdateStateSum shape before update: {updateStateSum.ndim}")
-            # print(f"UpdateStateSum before update:\n{updateStateSum}")
+            for i, K_t_i in enumerate(kalman_gain_list):
 
-            updateStateSum += K_t_i @ measurement_residual
-            updateCovarianceSum += K_t_i @ best_H_Matrix_list[i]
+                measurement_residual = z_t[i] - best_z_hat_list[i]
 
-        self.state += updateStateSum
-        self.state[2] = self.utils.wrap_angle(self.state[2])  # Normalize the orientation angle
-        self.covariance = (np.eye(updateCovarianceSum.shape[0]) - updateCovarianceSum) @ self.covariance
+                measurement_residual = measurement_residual.reshape(-1, 1)
+
+                # rospy.loginfo(f"\nIteration in summation{i}:")
+
+                # rospy.loginfo(f"\n K_t_i shape: {K_t_i.shape}")
+                # rospy.loginfo(f"\n K_t_i dim: {K_t_i.ndim}")
+                # rospy.loginfo(f"\n K_t_i:\n{K_t_i}")
+                
+                # rospy.loginfo(f"\n Measurement Residual shape: {measurement_residual.shape}")
+                # rospy.loginfo(f"\n Measurement Dimension: {measurement_residual.ndim}")
+                # rospy.loginfo(f"\n Measurement Residual:\n{measurement_residual}")
+
+                # rospy.loginfo(f"\n UpdateStateSum shape before update: {updateStateSum.shape}")
+                # rospy.loginfo(f"\n UpdateStateSum shape before update: {updateStateSum.ndim}")
+                # rospy.loginfo(f"\n UpdateStateSum before update:\n{updateStateSum}")
+
+                updateStateSum += K_t_i @ measurement_residual
+                updateCovarianceSum += K_t_i @ best_H_Matrix_list[i]
+
+            self.state += updateStateSum
+            self.state[2] = self.utils.wrap_angle(self.state[2])  # Normalize the orientation angle
+            self.covariance = (np.eye(updateCovarianceSum.shape[0]) - updateCovarianceSum) @ self.covariance
+
+            rospy.loginfo("\n=== State Vector after correction(self.state) ===")
+            rospy.loginfo(f"\n Shape: {self.state.shape}")
+            rospy.loginfo(f"\n State Vector:\n{self.state}")
+            
+            rospy.loginfo("\n=== Covariance Matrix after correction(self.covariance) ===")
+            rospy.loginfo(f"\n Shape: {self.covariance.shape}")
+            rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
+
+            rospy.loginfo("\n === CORRECTION FINISHED ====== CORRECTION FINISHED ======")
+
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f"\n Correction function took {elapsed_time:.6f} seconds.")
 
         return self.state, self.covariance, self.num_landmarks
-    
+        
 

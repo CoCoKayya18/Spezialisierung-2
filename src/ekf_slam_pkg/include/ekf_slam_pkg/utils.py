@@ -4,7 +4,9 @@ import csv
 from nav_msgs.msg import Odometry
 from tf.transformations import euler_from_quaternion
 from tf.transformations import quaternion_from_euler
-import pickle
+import matplotlib.pyplot as plt
+import numpy as np
+import glob
 import os
 
 class Utils:
@@ -92,4 +94,30 @@ class Utils:
             timestamp = rospy.Time.now().to_sec()
             writer.writerow([timestamp, pose[0], pose[1], pose[2]])
 
+    def clear_directory(self, directory):
+        files = glob.glob(f"{directory}/*")
+        for f in files:
+            os.remove(f)
+
+    def save_covariance_matrix_plot(self, cov_matrix, observation_loop, landmark_loop):
+        # Create plot
+        plt.imshow(np.log1p(np.abs(cov_matrix)), cmap='coolwarm', interpolation='none')
+        plt.colorbar()
+        plt.title(f'Covariance Matrix (Obs: {observation_loop}, LM: {landmark_loop})')
+
+        # Save the plot with observation and landmark loop in filename
+        filename = f"../Spezialisierung-2/src/ekf_slam_pkg/plots/Covariance_Plots/cov_matrix_obs_{observation_loop}_lm_{landmark_loop}.png"
+        plt.savefig(filename)
+        plt.close()
+
+    def save_jacobian_plot(self, jacobian, observation_loop, landmark_loop):
+        # Create plot
+        plt.matshow(jacobian, cmap='coolwarm')
+        plt.colorbar()
+        plt.title(f'H Jacobian (Obs: {observation_loop}, LM: {landmark_loop})')
+
+        # Save the plot with observation and landmark loop in filename
+        filename = f"../Spezialisierung-2/src/ekf_slam_pkg/plots/H_Jacobian_Plots/jacobian_obs_{observation_loop}_lm_{landmark_loop}.png"
+        plt.savefig(filename)
+        plt.close()
         
