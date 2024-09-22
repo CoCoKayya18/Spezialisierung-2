@@ -40,6 +40,13 @@ class Robot:
         ekf_path_csv_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/ekf_path.csv'
         odom_velocities_csv_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/odom_velocities.csv'
 
+        # Clear the plot directories
+        self.utils.clear_directory("../Spezialisierung-2/src/ekf_slam_pkg/plots/Covariance_Plots")
+        self.utils.clear_directory("../Spezialisierung-2/src/ekf_slam_pkg/plots/H_Jacobian_Plots")
+        self.utils.clear_directory("../Spezialisierung-2/src/ekf_slam_pkg/plots/DBSCAN_Plots")
+
+
+
         # Initialize CSV files with headers
         # self.utils.initialize_csv_files(ground_truth_csv_path, ekf_path_csv_path, odom_velocities_csv_path)
         
@@ -70,29 +77,29 @@ class Robot:
 
     def scan_callback(self, msg):
 
-        try:
-            self.scan_message = msg
-            
-            ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
-
-            self.state = ekf_corrected_pose
-            self.covariance = ekf_corrected_covariance
-            self.num_landmarks = num_landmarks
-
-            # print("\n=== State Vector after correction in robot (self.state) ===")
-            # print(f"Shape: {self.state.shape}")
-            # print(f"State Vector:\n{self.state}")
-            
-            # print("\n=== Covariance Matrix after correction in robot (self.covariance) ===")
-            # print(f"Shape: {self.covariance.shape}")
-            # print(f"Covariance Matrix:\n{self.covariance}")
+        # try:
+        self.scan_message = msg
         
-            self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
-            self.ekf_path.append(ekf_corrected_pose)
-            self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Red path
+        ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
+
+        self.state = ekf_corrected_pose
+        self.covariance = ekf_corrected_covariance
+        self.num_landmarks = num_landmarks
+
+        # print("\n=== State Vector after correction in robot (self.state) ===")
+        # print(f"Shape: {self.state.shape}")
+        # print(f"State Vector:\n{self.state}")
         
-        except Exception as e:
-            rospy.logerr(f"Exception raised: {e}")
+        # print("\n=== Covariance Matrix after correction in robot (self.covariance) ===")
+        # print(f"Shape: {self.covariance.shape}")
+        # print(f"Covariance Matrix:\n{self.covariance}")
+    
+        self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
+        self.ekf_path.append(ekf_corrected_pose)
+        self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Red path
+        
+        # except Exception as e:
+            # rospy.logerr(f"Exception raised: {e}")
             
 
 
