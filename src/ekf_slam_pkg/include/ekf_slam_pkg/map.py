@@ -99,5 +99,7 @@ class Map:
                 x_landmark = state_vector[i]
                 y_landmark = state_vector[i + 1]
                 landmarks.append((x_landmark, y_landmark))
+
+        rospy.loginfo(f"Landmarks: {landmarks}")
         
         return landmarks

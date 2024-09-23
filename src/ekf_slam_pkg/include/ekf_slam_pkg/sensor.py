@@ -54,7 +54,7 @@ class Sensor:
             
             # self.visualize_features(valid_points, labels, features)
 
-            print(f"\n Following features detected: {features}")
+            # print(f"\n Following features detected: {features}")
             
             return features
 
