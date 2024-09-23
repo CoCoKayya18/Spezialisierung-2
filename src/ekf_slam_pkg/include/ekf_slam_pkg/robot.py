@@ -7,6 +7,7 @@ from geometry_msgs.msg import Point
 from geometry_msgs.msg import Pose
 from tf.transformations import quaternion_from_euler
 from math import sqrt
+import threading
 import csv
 
 class Robot:
@@ -21,6 +22,8 @@ class Robot:
         self.ekf_slam = ekf_slam
         self.utils = utils
         rospy.loginfo("Robot class initialized")
+
+        self.lock = threading.Lock() # Thread lock so predict and correct dont collide
 
         # Publishers and subscribers
         self.odom_sub = rospy.Subscriber('/odom', Odometry, self.odom_callback, queue_size=1)
@@ -52,54 +55,62 @@ class Robot:
         
     def odom_callback(self, msg):
 
-        self.current_pose = self.state
+        # self.current_pose = self.state
 
         self.current_vel = self.utils.transform_odometry_to_world(msg)
-
-        ekf_predicted_pose, ekf_predicted_covariance = self.ekf_slam.predict(self.current_vel, self.current_pose, self.covariance)  # Run the EKF prediction
         
-        self.state = ekf_predicted_pose
-        self.covariance = ekf_predicted_covariance
+        with self.lock:
 
-        # print("\n=== State Vector after prediction in robot (self.state) ===")
-        # print(f"Shape: {self.state.shape}")
-        # print(f"State Vector:\n{self.state}")
-        
-        # print("\n=== Covariance Matrix after prediction in robot (self.covariance) ===")
-        # print(f"Shape: {self.covariance.shape}")
-        # print(f"Covariance Matrix:\n{self.covariance}")
-        
-        self.ekf_path.append(ekf_predicted_pose)
-        self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
+            # rospy.loginfo("\n=== State Vector before prediction in robot (self.state) ===")
+            # rospy.loginfo(f"\n Shape: {self.state.shape}")
+            # rospy.loginfo(f"\n State Vector:\n{self.state}")
+            
+            # rospy.loginfo("\n=== Covariance Matrix before prediction in robot (self.covariance) ===")
+            # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
+            # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
 
-        # Save odom velocities to CSV
-        # self.utils.save_odom_velocities_to_csv(msg)
+            ekf_predicted_pose, ekf_predicted_covariance = self.ekf_slam.predict(self.current_vel, self.state, self.covariance, self.num_landmarks)  # Run the EKF prediction
+            
+            self.state = ekf_predicted_pose
+            self.covariance = ekf_predicted_covariance
+
+            # rospy.loginfo("\n=== State Vector after prediction in robot (self.state) ===")
+            # rospy.loginfo(f"Shape: {self.state.shape}")
+            # rospy.loginfo(f"State Vector:\n{self.state}")
+            
+            # rospy.loginfo("\n=== Covariance Matrix after prediction in robot (self.covariance) ===")
+            # rospy.loginfo(f"Shape: {self.covariance.shape}")
+            # rospy.loginfo(f"Covariance Matrix:\n{self.covariance}")
+            
+            self.ekf_path.append(ekf_predicted_pose)
+            self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
+
+            # Save odom velocities to CSV
+            # self.utils.save_odom_velocities_to_csv(msg)
 
     def scan_callback(self, msg):
 
-        # try:
         self.scan_message = msg
-        
-        ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
 
-        self.state = ekf_corrected_pose
-        self.covariance = ekf_corrected_covariance
-        self.num_landmarks = num_landmarks
+        with self.lock:
+        
+            ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
 
-        # print("\n=== State Vector after correction in robot (self.state) ===")
-        # print(f"Shape: {self.state.shape}")
-        # print(f"State Vector:\n{self.state}")
+            self.state = ekf_corrected_pose
+            self.covariance = ekf_corrected_covariance
+            self.num_landmarks = num_landmarks
+
+            # rospy.loginfo("\n === State Vector after correction in robot (self.state) ===")
+            # rospy.loginfo(f"\n Shape: {self.state.shape}")
+            # rospy.loginfo(f"\n State Vector:\n{self.state}")
+            
+            # rospy.loginfo("\n=== Covariance Matrix after correction in robot (self.covariance) ===")
+            # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
+            # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
         
-        # print("\n=== Covariance Matrix after correction in robot (self.covariance) ===")
-        # print(f"Shape: {self.covariance.shape}")
-        # print(f"Covariance Matrix:\n{self.covariance}")
-    
-        self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
-        self.ekf_path.append(ekf_corrected_pose)
-        self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Red path
-        
-        # except Exception as e:
-            # rospy.logerr(f"Exception raised: {e}")
+            self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
+            self.ekf_path.append(ekf_corrected_pose)
+            self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Red path
             
 
 
