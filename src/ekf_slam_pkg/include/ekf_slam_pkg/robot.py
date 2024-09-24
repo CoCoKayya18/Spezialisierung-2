@@ -187,7 +187,7 @@ class Robot:
         # Save EKF path to CSV
         self.utils.save_ekf_path_to_csv(path[-1])  # Save the last path point
 
-    def publish_map(self, landmarks, namespace="landmarks", color=[1.0, 0.0, 0.0]):
+    def publish_map(self, landmarks, namespace="landmarks", color=[1.0, 1.0, 0.0]):
         marker = Marker()
         marker.header.frame_id = "map"
         marker.header.stamp = rospy.Time.now()
@@ -195,12 +195,22 @@ class Robot:
         marker.id = 0
         marker.type = Marker.POINTS
         marker.action = Marker.ADD
-        marker.scale.x = 0.1  # Set the size of the points
-        marker.scale.y = 0.1
+        marker.scale.x = 1  # Set the size of the points
+        marker.scale.y = 1
         marker.color.r = color[0]
         marker.color.g = color[1]
         marker.color.b = color[2]
         marker.color.a = 1.0  # Fully opaque
+
+        # Check if landmarks are available
+        # if len(landmarks) > 0:
+        #     # Add only the first landmark as a point
+        #     first_landmark = landmarks[0]
+        #     point = Point()
+        #     point.x = first_landmark[0]  # First landmark X coordinate
+        #     point.y = first_landmark[1]  # First landmark Y coordinate
+        #     point.z = 0                  # Landmarks are in 2D, so Z is 0
+        #     marker.points.append(point)
 
         # Add landmarks as points
         for lm in landmarks:
@@ -210,7 +220,7 @@ class Robot:
             point.z = 0      # Landmarks are in 2D, so Z is 0
             marker.points.append(point)
 
-        # Publish the marker to the /slam_map topic
+        # # Publish the marker to the /slam_map topic
         if self.map_pub.get_num_connections() > 0:
             self.map_pub.publish(marker)
         else:
