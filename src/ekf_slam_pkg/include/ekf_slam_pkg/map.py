@@ -100,6 +100,6 @@ class Map:
                 y_landmark = state_vector[i + 1]
                 landmarks.append((x_landmark, y_landmark))
 
-        rospy.loginfo(f"Landmarks: {landmarks}")
+        # rospy.loginfo(f"Landmarks: {landmarks}")
         
         return landmarks
