@@ -171,13 +171,22 @@ class Robot:
             last_point = self.filtered_points[-1] if self.filtered_points else None
             
             for p in path:
-                new_point = Point(p[0], p[1], 0)
+
+                x_val = p[0].item() if isinstance(p[0], np.ndarray) else p[0]
+                y_val = p[1].item() if isinstance(p[1], np.ndarray) else p[1]
+
+                new_point = Point(x_val, y_val, 0)
+
                 if last_point is None or sqrt((new_point.x - last_point.x) ** 2 + (new_point.y - last_point.y) ** 2) > min_distance:
                     self.filtered_points.append(new_point)
                     last_point = new_point
+                else:
+                    rospy.loginfo(f"Point x: {new_point.x}, y: {new_point.y}, z: {new_point.z} is too close to the last point x: {last_point.x}, y: {last_point.y}, z: {last_point.z}, skipping.")
 
         # Set the filtered points to the marker
         marker.points = self.filtered_points
+
+        rospy.loginfo(f"Marker length: {len(marker.points)}")
 
         if self.EKF_path_pub.get_num_connections() > 0:
             self.EKF_path_pub.publish(marker)
