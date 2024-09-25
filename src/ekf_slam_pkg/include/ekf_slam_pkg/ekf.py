@@ -475,11 +475,11 @@ class EKFSLAM:
         self.state[2] = self.utils.wrap_angle(self.state[2])  # Normalize the orientation angle
         self.covariance = (np.eye(updateCovarianceSum.shape[0]) - updateCovarianceSum) @ self.covariance
 
-        if np.any(self.covariance < 0):
-            rospy.logerr("Negative value detected in covariance matrix in correction step at the end!")
-            rospy.logerr(f"Covariance Matrix:\n{self.covariance}")
-            # Shut down the program with an error message
-            sys.exit("Shutting down program due to negative covariance value.")
+        # if np.any(self.covariance < 0):
+        #     rospy.logerr("Negative value detected in covariance matrix in correction step at the end!")
+        #     rospy.logerr(f"Covariance Matrix:\n{self.covariance}")
+        #     # Shut down the program with an error message
+        #     sys.exit("Shutting down program due to negative covariance value.")
 
         # rospy.loginfo("\n=== State Vector after correction(self.state) ===")
         # rospy.loginfo(f"\n Shape: {self.state.shape}")
