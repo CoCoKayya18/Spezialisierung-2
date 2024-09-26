@@ -1,7 +1,6 @@
 import numpy as np
 import rospy
 import pickle
-import rospy
 import time
 import sys
 from geometry_msgs.msg import Pose
