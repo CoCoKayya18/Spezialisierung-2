@@ -70,6 +70,6 @@
   <!-- <arg name="node_start_delay" default="1.0" /> -->
 
   <node name="main" pkg="ekf_slam_pkg" type="main.py" output="screen"> </node>
-  <!-- <node name="SendGoal" pkg="ekf_slam_pkg" type="SendGoal.py" output="screen"> </node> -->
+  <node name="SendGoal" pkg="ekf_slam_pkg" type="SendGoal.py" output="screen"> </node>
 
 </launch>

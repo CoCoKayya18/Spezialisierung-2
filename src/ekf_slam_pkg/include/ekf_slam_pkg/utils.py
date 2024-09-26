@@ -74,13 +74,13 @@ class Utils:
         with open(odom_velocities_csv_path, 'w', newline='') as csvfile:
             self.odom_velocities_csv_path = odom_velocities_csv_path
             writer = csv.writer(csvfile)
-            writer.writerow(['timestamp', 'linear_x', 'linear_y', 'angular_z'])  # Header for odom velocities
+            writer.writerow(['timestamp', 'linear_x', 'linear_y', 'angular_z', 'Orientation_Quat_x', 'Orientation_Quat_y', 'Orientation_Quat_z', 'Orientation_Quat_w'])  # Header for odom velocities
 
     def save_odom_velocities_to_csv(self, msg):
         with open(self.odom_velocities_csv_path, 'a', newline='') as csvfile:
             writer = csv.writer(csvfile)
             timestamp = rospy.Time.now().to_sec()
-            writer.writerow([timestamp, msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.angular.z])
+            writer.writerow([timestamp, msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.angular.z, msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])
     
     def save_ground_truth_path_to_csv(self, pose):
         with open(self.ground_truth_csv_path, 'a', newline='') as csvfile:
@@ -92,7 +92,7 @@ class Utils:
         with open(self.ekf_path_csv_path, 'a', newline='') as csvfile:
             writer = csv.writer(csvfile)
             timestamp = rospy.Time.now().to_sec()
-            writer.writerow([timestamp, pose[0], pose[1], pose[2]])
+            writer.writerow([timestamp, pose[0].item() if isinstance(pose[0], np.ndarray) else pose[1], pose[1].item() if isinstance(pose[1], np.ndarray) else pose[1], pose[2].item() if isinstance(pose[2], np.ndarray) else pose[2]])
 
     def clear_directory(self, directory):
         files = glob.glob(f"{directory}/*")
