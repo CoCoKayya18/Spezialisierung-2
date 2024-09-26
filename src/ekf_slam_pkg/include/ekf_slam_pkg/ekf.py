@@ -46,11 +46,12 @@ class EKFSLAM:
     # EKF prediction step
     def predict(self, currentVel, currentPosition, currentCovariance, num_landmarks):
 
-        # with self.lock:
-
         # rospy.loginfo("\n === currentPosition before prediction(self.state) ===")
         # rospy.loginfo(f"\n Shape: {currentPosition.shape}")
         # rospy.loginfo(f"\n currentPosition:\n{currentPosition}")
+
+        self.state = currentPosition
+        self.covariance = currentCovariance
         
         # rospy.loginfo("\n=== currentCovariance Matrix before prediction(self.covariance) ===")
         # rospy.loginfo(f"\n Shape: {currentCovariance.shape}")
@@ -71,42 +72,45 @@ class EKFSLAM:
 
         ' Resize the F_x matrix to adjust for the landmarks too'
         state_vector_size = 3 + 2 * self.num_landmarks
-        F_x = np.zeros((state_vector_size, state_vector_size))
+        F_x = np.zeros((3, state_vector_size))
 
         # The top-left 3x3 block is the identity matrix that updates the robot's pose
         F_x[0, 0] = 1  # x -> x
         F_x[1, 1] = 1  # y -> y
         F_x[2, 2] = 1
 
-        # Extend the process noise and the prediction to the actuall state and variance
+        predictedDelta = np.array(predictedDelta).reshape(-1, 1)
 
-        R_t_ext = np.zeros((state_vector_size, state_vector_size))
-        R_t_ext[:3, :3] = self.process_noise
-
-        predictedDelta_ext = np.zeros((state_vector_size, 1))
-        predictedDelta_ext[:3] = predictedDelta.reshape(3, 1)
-
-        # rospy.loginfo(f"\n Predicted_Delta_ext Shape: {predictedDelta_ext.shape}")
-        # rospy.loginfo(f"Predicted_Delta_ext: {predictedDelta_ext}")
-
-        predicted_covariance_ext = np.zeros((state_vector_size, state_vector_size))
-        predicted_covariance_ext[:3, :3] = predicted_covariance
+        # rospy.loginfo(f"\n Predicted_Delta Shape: {predictedDelta.shape}")
+        rospy.loginfo(f"Predicted_Delta: {predictedDelta}")
 
         # rospy.loginfo(f"\n F_x Shape: {F_x.shape}")
-        # rospy.loginfo(f"\n F_x Matrix: {F_x}")
+        # rospy.loginfo(f"\n F_x transposed Matrix: {F_x.T}")
 
-        # rospy.loginfo(f"\n R_t_ext Shape: {R_t_ext.shape}")
-        # rospy.loginfo(f"\n R_t_ext Matrix: {R_t_ext}")
+        # rospy.loginfo(f"\n process noise matrix Shape: {self.process_noise.shape}")
+        # rospy.loginfo(f"\n process noise matrix Matrix: {self.process_noise}")
 
-        # rospy.loginfo(f"\n Predicted Covariance ext Shape: {predicted_covariance_ext.shape}")
-        # rospy.loginfo(f"\n predicted_covariance ext Matrix: {predicted_covariance_ext}")
+        # rospy.loginfo(f"\n Predicted Covariance Shape: {predicted_covariance.shape}")
+        # rospy.loginfo(f"\n predicted_covariance Matrix: {predicted_covariance}")
 
-        currentPosition += F_x.T @ predictedDelta_ext
-        currentCovariance +=  predicted_covariance_ext + F_x.T @ R_t_ext @ F_x
+        self.state += F_x.T @ predictedDelta
+        self.covariance += F_x.T @ predicted_covariance @ F_x + F_x.T @ self.process_noise @ F_x
+
+        # self.state += predictedDelta
+
+        # rospy.loginfo("\n === currentPosition after prediction(self.state) ===")
+        # rospy.loginfo(f"\n Shape: {currentPosition.shape}")
+        # rospy.loginfo(f"\n currentPosition:\n{currentPosition}")
+        
+        # rospy.loginfo("\n=== currentCovariance Matrix after prediction(self.covariance) ===")
+        # rospy.loginfo(f"\n Shape: {currentCovariance.shape}")
+        # rospy.loginfo(f"\n currentCovariance Matrix:\n{currentCovariance}")
+
+        # rospy.loginfo(f"Difference: {currentPosition - self.state}")
 
         # Update state
-        self.state = currentPosition
-        self.covariance = currentCovariance    
+        # self.state = currentPosition
+        # self.covariance = currentCovariance    
 
         # if np.any(self.covariance < 0):
         #     rospy.logerr("Negative value detected in covariance matrix in prediction step!")

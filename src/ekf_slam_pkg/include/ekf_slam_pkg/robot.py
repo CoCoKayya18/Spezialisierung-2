@@ -26,7 +26,7 @@ class Robot:
         self.lock = threading.Lock() # Thread lock so predict and correct dont collide
 
         # Publishers and subscribers
-        self.odom_sub = rospy.Subscriber('/odom', Odometry, self.odom_callback, queue_size=1)
+        self.odom_sub = rospy.Subscriber('/odom', Odometry, self.odom_callback, queue_size=10)
         self.laser_sub = rospy.Subscriber('/scan', LaserScan, self.scan_callback, queue_size=1)
         self.ground_truth_sub = rospy.Subscriber('/ground_truth/state', Odometry, self.ground_truth_callback, queue_size=1)
 
@@ -38,6 +38,7 @@ class Robot:
         self.current_vel = np.zeros((3, 1))
         self.ground_truth_path = []
         self.ekf_path = []
+        self.filtered_points = []
 
         ground_truth_csv_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/ground_truth_path.csv'
         ekf_path_csv_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/ekf_path.csv'
@@ -51,19 +52,19 @@ class Robot:
 
 
         # Initialize CSV files with headers
-        # self.utils.initialize_csv_files(ground_truth_csv_path, ekf_path_csv_path, odom_velocities_csv_path)
+        self.utils.initialize_csv_files(ground_truth_csv_path, ekf_path_csv_path, odom_velocities_csv_path)
         
     def odom_callback(self, msg):
 
         # self.current_pose = self.state
-
-        self.current_vel = self.utils.transform_odometry_to_world(msg)
-        
         with self.lock:
 
-            # rospy.loginfo("\n=== State Vector before prediction in robot (self.state) ===")
-            # rospy.loginfo(f"\n Shape: {self.state.shape}")
-            # rospy.loginfo(f"\n State Vector:\n{self.state}")
+            self.current_vel = self.utils.transform_odometry_to_world(msg)
+        
+
+            rospy.loginfo("\n=== State Vector before prediction in robot (self.state) ===")
+            rospy.loginfo(f"\n Shape: {self.state.shape}")
+            rospy.loginfo(f"\n State Vector:\n{self.state}")
             
             # rospy.loginfo("\n=== Covariance Matrix before prediction in robot (self.covariance) ===")
             # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
@@ -74,9 +75,9 @@ class Robot:
             self.state = ekf_predicted_pose
             self.covariance = ekf_predicted_covariance
 
-            # rospy.loginfo("\n=== State Vector after prediction in robot (self.state) ===")
-            # rospy.loginfo(f"Shape: {self.state.shape}")
-            # rospy.loginfo(f"State Vector:\n{self.state}")
+            rospy.loginfo("\n=== State Vector after prediction in robot (self.state) ===")
+            rospy.loginfo(f"Shape: {self.state.shape}")
+            rospy.loginfo(f"State Vector:\n{self.state}")
             
             # rospy.loginfo("\n=== Covariance Matrix after prediction in robot (self.covariance) ===")
             # rospy.loginfo(f"Shape: {self.covariance.shape}")
@@ -86,31 +87,31 @@ class Robot:
             self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
 
             # Save odom velocities to CSV
-            # self.utils.save_odom_velocities_to_csv(msg)
+            self.utils.save_odom_velocities_to_csv(msg)
 
     def scan_callback(self, msg):
 
         self.scan_message = msg
 
-        with self.lock:
+        # with self.lock:
         
-            ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
+        #     ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
 
-            self.state = ekf_corrected_pose
-            self.covariance = ekf_corrected_covariance
-            self.num_landmarks = num_landmarks
+        #     self.state = ekf_corrected_pose
+        #     self.covariance = ekf_corrected_covariance
+        #     self.num_landmarks = num_landmarks
 
-            # rospy.loginfo("\n === State Vector after correction in robot (self.state) ===")
-            # rospy.loginfo(f"\n Shape: {self.state.shape}")
-            # rospy.loginfo(f"\n State Vector:\n{self.state}")
+        #     # rospy.loginfo("\n === State Vector after correction in robot (self.state) ===")
+        #     # rospy.loginfo(f"\n Shape: {self.state.shape}")
+        #     # rospy.loginfo(f"\n State Vector:\n{self.state}")
             
-            # rospy.loginfo("\n=== Covariance Matrix after correction in robot (self.covariance) ===")
-            # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
-            # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
+        #     # rospy.loginfo("\n=== Covariance Matrix after correction in robot (self.covariance) ===")
+        #     # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
+        #     # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
         
-            self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
-            self.ekf_path.append(ekf_corrected_pose)
-            self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Red path
+        #     self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
+        #     self.ekf_path.append(ekf_corrected_pose)
+        #     self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Red path
             
 
 
@@ -119,7 +120,7 @@ class Robot:
         self.publish_GT_path(self.ground_truth_path, "ground_truth_path", [0.0, 1.0, 0.0])  # Green path
 
         # Save ground truth path to CSV
-        # self.utils.save_ground_truth_path_to_csv(msg.pose.pose)
+        self.utils.save_ground_truth_path_to_csv(msg.pose.pose)
 
     def publish_GT_path(self, path, namespace, color):
         marker = Marker()
@@ -144,7 +145,7 @@ class Robot:
         else:
             rospy.logwarn("No subscribers to the GT path topic or the topic is closed.")
         
-    def publish_EKF_path(self, path, namespace, color, min_distance=0.05):
+    def publish_EKF_path(self, path, namespace, color, min_distance=0.0005):
         marker = Marker()
         marker.header.frame_id = "map"
         marker.header.stamp = rospy.Time.now()
@@ -180,13 +181,13 @@ class Robot:
                 if last_point is None or sqrt((new_point.x - last_point.x) ** 2 + (new_point.y - last_point.y) ** 2) > min_distance:
                     self.filtered_points.append(new_point)
                     last_point = new_point
-                else:
-                    rospy.loginfo(f"Point x: {new_point.x}, y: {new_point.y}, z: {new_point.z} is too close to the last point x: {last_point.x}, y: {last_point.y}, z: {last_point.z}, skipping.")
+                # else:
+                    # rospy.loginfo(f"Point x: {new_point.x}, y: {new_point.y}, z: {new_point.z} is too close to the last point x: {last_point.x}, y: {last_point.y}, z: {last_point.z}, skipping.")
 
         # Set the filtered points to the marker
         marker.points = self.filtered_points
 
-        rospy.loginfo(f"Marker length: {len(marker.points)}")
+        # rospy.loginfo(f"Marker length: {len(marker.points)}")
 
         if self.EKF_path_pub.get_num_connections() > 0:
             self.EKF_path_pub.publish(marker)
@@ -196,42 +197,42 @@ class Robot:
         # Save EKF path to CSV
         self.utils.save_ekf_path_to_csv(path[-1])  # Save the last path point
 
-    def publish_map(self, landmarks, namespace="landmarks", color=[1.0, 1.0, 0.0]):
-        marker = Marker()
-        marker.header.frame_id = "map"
-        marker.header.stamp = rospy.Time.now()
-        marker.ns = namespace
-        marker.id = 0
-        marker.type = Marker.POINTS
-        marker.action = Marker.ADD
-        marker.scale.x = 1  # Set the size of the points
-        marker.scale.y = 1
-        marker.color.r = color[0]
-        marker.color.g = color[1]
-        marker.color.b = color[2]
-        marker.color.a = 1.0  # Fully opaque
+    # def publish_map(self, landmarks, namespace="landmarks", color=[1.0, 1.0, 0.0]):
+    #     marker = Marker()
+    #     marker.header.frame_id = "map"
+    #     marker.header.stamp = rospy.Time.now()
+    #     marker.ns = namespace
+    #     marker.id = 0
+    #     marker.type = Marker.POINTS
+    #     marker.action = Marker.ADD
+    #     marker.scale.x = 1  # Set the size of the points
+    #     marker.scale.y = 1
+    #     marker.color.r = color[0]
+    #     marker.color.g = color[1]
+    #     marker.color.b = color[2]
+    #     marker.color.a = 1.0  # Fully opaque
 
-        # Check if landmarks are available
-        # if len(landmarks) > 0:
-        #     # Add only the first landmark as a point
-        #     first_landmark = landmarks[0]
-        #     point = Point()
-        #     point.x = first_landmark[0]  # First landmark X coordinate
-        #     point.y = first_landmark[1]  # First landmark Y coordinate
-        #     point.z = 0                  # Landmarks are in 2D, so Z is 0
-        #     marker.points.append(point)
+    #     # Check if landmarks are available
+    #     # if len(landmarks) > 0:
+    #     #     # Add only the first landmark as a point
+    #     #     first_landmark = landmarks[0]
+    #     #     point = Point()
+    #     #     point.x = first_landmark[0]  # First landmark X coordinate
+    #     #     point.y = first_landmark[1]  # First landmark Y coordinate
+    #     #     point.z = 0                  # Landmarks are in 2D, so Z is 0
+    #     #     marker.points.append(point)
 
-        # Add landmarks as points
-        for lm in landmarks:
-            point = Point()
-            point.x = lm[0]  # Landmark X coordinate
-            point.y = lm[1]  # Landmark Y coordinate
-            point.z = 0      # Landmarks are in 2D, so Z is 0
-            marker.points.append(point)
+    #     # Add landmarks as points
+    #     for lm in landmarks:
+    #         point = Point()
+    #         point.x = lm[0]  # Landmark X coordinate
+    #         point.y = lm[1]  # Landmark Y coordinate
+    #         point.z = 0      # Landmarks are in 2D, so Z is 0
+    #         marker.points.append(point)
 
-        # # Publish the marker to the /slam_map topic
-        if self.map_pub.get_num_connections() > 0:
-            self.map_pub.publish(marker)
-        else:
-            rospy.logwarn("No subscribers to the map topic or the topic is closed.")
+    #     # # Publish the marker to the /slam_map topic
+    #     if self.map_pub.get_num_connections() > 0:
+    #         self.map_pub.publish(marker)
+    #     else:
+    #         rospy.logwarn("No subscribers to the map topic or the topic is closed.")
 

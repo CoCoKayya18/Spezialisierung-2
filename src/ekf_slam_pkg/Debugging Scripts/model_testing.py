@@ -8,6 +8,21 @@ import GPy
 import matplotlib.pyplot as plt
 from matplotlib.widgets import CheckButtons
 import seaborn as sns
+from tf.transformations import euler_from_quaternion
+
+def transform_odometry_to_world(linear_x, linear_y, angular_z, orientation_list) :
+        
+        # Convert quaternion to Euler angles to get yaw
+        _, _, yaw = euler_from_quaternion(orientation_list)
+        
+        # Apply rotation matrix to transform velocities to the world frame
+        v_x_world = linear_x * np.cos(yaw) - linear_y * np.sin(yaw)
+        v_y_world = linear_x * np.sin(yaw) + linear_y * np.cos(yaw)
+
+        # Create the transformed velocity vector (including angular velocity)
+        transformed_velocities = np.array([[v_x_world, v_y_world, angular_z]])
+
+        return transformed_velocities
 
 def load_scalers(scaler_x_path, scaler_y_path):
     """Load the scalers for input and output data."""
@@ -34,6 +49,7 @@ def predict_path(odom_velocities, scaler_X, scaler_Y, model):
     
     # Inverse transform to get the original scale
     Y_pred = scaler_Y.inverse_transform(Y_pred_scaled)
+
     return Y_pred
 
 def visualize_paths_with_check_buttons(ground_truth, predicted_path, plot_dir):
@@ -51,9 +67,15 @@ def visualize_paths_with_check_buttons(ground_truth, predicted_path, plot_dir):
     gt_line, = ax.plot(ground_truth[:, 0], ground_truth[:, 1],
                        label='Ground Truth Path', color='blue')
     
-    # Plot Predicted Path
-    pred_line, = ax.plot(np.cumsum(predicted_path[:, 0]), np.cumsum(predicted_path[:, 1]),
-                         label='Predicted Path', color='red', linestyle='dashed')
+    # Define the starting point (for example, start at x=0, y=0)
+    starting_point = np.array([1, 1, 0])  # Replace with your desired starting coordinates
+
+    # Calculate the cumulative path and add the starting point
+    predicted_cumulative_path = np.cumsum(predicted_path, axis=0) + starting_point
+
+    # Plot the predicted path with the starting point included
+    pred_line, = ax.plot(predicted_cumulative_path[:, 0], predicted_cumulative_path[:, 1],
+                        label='Predicted Path', color='red', linestyle='dashed')
     
     ax.set_title('Ground Truth vs Predicted Path')
     ax.set_xlabel('X Position (meters)')
@@ -110,20 +132,35 @@ def main(use_old_test_data=False):
         ground_truth = calculate_cumulative_path(deltas)
     else:
         # Load new test data
-        odom_velocities = pd.read_csv(odom_velocities_path)[['linear_x', 'linear_y', 'angular_z']].values
+        odom_velocities = pd.read_csv(odom_velocities_path)[['linear_x', 'linear_y', 'angular_z', 'Orientation_Quat_x', 'Orientation_Quat_y', 'Orientation_Quat_z', 'Orientation_Quat_w']].values
         ground_truth = pd.read_csv(ground_truth_path)[['x', 'y', 'z']].values
 
     # Load scalers and model
     scaler_X, scaler_Y = load_scalers(scaler_x_path, scaler_y_path)
     model = load_model(model_path)
 
+    transformed_velocities_list = []
+
+    for row in odom_velocities:
+        linear_x, linear_y, angular_z = row[0], row[1], row[2]
+        orientation_list = row[3:]  # Orientation quaternion (4 elements)
+
+        # Call the transform function with the extracted values
+        transformed_velocities = transform_odometry_to_world(linear_x, linear_y, angular_z, orientation_list)
+
+        # Append the result to the list
+        transformed_velocities_list.append(transformed_velocities)
+
+    # Convert the list of transformed velocities to a numpy array for further use
+    transformed_velocities_array = np.vstack(transformed_velocities_list)
+
     # Predict path using the model
-    predicted_path = predict_path(odom_velocities, scaler_X, scaler_Y, model)
+    predicted_path = predict_path(transformed_velocities_array, scaler_X, scaler_Y, model)
 
     # Visualize the predicted path vs ground truth path with interactive check buttons
     visualize_paths_with_check_buttons(ground_truth, predicted_path, plot_dir)
 
 if __name__ == '__main__':
     # Set the boolean flag to True or False to switch between datasets
-    use_old_test_data = True  # Set to True to use the old test data
+    use_old_test_data = False  # Set to True to use the old test data
     main(use_old_test_data)
