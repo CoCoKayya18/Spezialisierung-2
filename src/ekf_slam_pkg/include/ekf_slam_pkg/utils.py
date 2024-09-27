@@ -31,9 +31,9 @@ class Utils:
 
         return pose
 
-    def wrap_angle(self, angle):
+    def normalize_angle(self, angle):
         # Wrap angle between -pi and pi
-        return (angle + np.pi) % (2 * np.pi) - np.pi
+        return np.arctan2(np.sin(angle), np.cos(angle))
 
     def transform_odometry_to_world(self, odometry_msg: Odometry) -> np.ndarray:
         # Extract velocities from odometry
@@ -121,3 +121,22 @@ class Utils:
         plt.savefig(filename)
         plt.close()
         
+    def laser_scan_to_polar_tuples(self, scanMessage):
+
+        # Extract the ranges from the scan message
+        ranges = np.array(scanMessage.ranges)
+
+        # Create an array of angles corresponding to each range value
+        angles = scanMessage.angle_min + np.arange(len(ranges)) * scanMessage.angle_increment
+
+        # Remove invalid readings (infinite or 0 values)
+        valid_indices = np.isfinite(ranges) & (ranges > 0)
+
+        # Filter the ranges and angles using valid indices
+        valid_ranges = ranges[valid_indices]
+        valid_angles = angles[valid_indices]
+
+        # Create a list of tuples (r, phi)
+        polar_coordinates = [(r, phi) for r, phi in zip(valid_ranges, valid_angles)]
+
+        return polar_coordinates

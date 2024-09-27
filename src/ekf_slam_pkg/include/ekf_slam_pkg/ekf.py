@@ -19,7 +19,7 @@ class EKFSLAM:
         self.covariance = np.eye(3)
         self.num_landmarks = 0 
         self.state = np.eye(3)
-        self.alpha = 5
+        self.alpha = 10
 
         self.F_x = np.eye(3)
         
@@ -81,7 +81,7 @@ class EKFSLAM:
         predictedDelta = np.array(predictedDelta).reshape(-1, 1)
 
         # rospy.loginfo(f"\n Predicted_Delta Shape: {predictedDelta.shape}")
-        rospy.loginfo(f"Predicted_Delta: {predictedDelta}")
+        # rospy.loginfo(f"Predicted_Delta: {predictedDelta}")
 
         # rospy.loginfo(f"\n F_x Shape: {F_x.shape}")
         # rospy.loginfo(f"\n F_x transposed Matrix: {F_x.T}")
@@ -93,6 +93,9 @@ class EKFSLAM:
         # rospy.loginfo(f"\n predicted_covariance Matrix: {predicted_covariance}")
 
         self.state += F_x.T @ predictedDelta
+
+        self.state[2] = self.utils.normalize_angle(self.state[2])
+
         self.covariance += F_x.T @ predicted_covariance @ F_x + F_x.T @ self.process_noise @ F_x
 
         # self.state += predictedDelta
@@ -136,8 +139,6 @@ class EKFSLAM:
 
         start_time = time.time()
 
-        # with self.lock:
-
         self.state = currentStateVector
         self.covariance = currentCovarianceMatrix
 
@@ -161,7 +162,9 @@ class EKFSLAM:
 
         # Feature Extraction Step
         z_t = self.sensor.extract_features_from_scan(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment)
-            
+        
+        # z_t = self.utils.laser_scan_to_polar_tuples(scanMessage)
+
         # Start observation loop
 
         observation_counter = 0
@@ -184,6 +187,8 @@ class EKFSLAM:
             # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
             # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
 
+            # rospy.loginfo(f"Observation {observation_counter}")
+
             # intialize new landmark and create tempoprary state and covariance matrices
             newLandmark_x, newLandmark_y = self.map.calculate_landmark_estimates(x, y, theta, z_i)
             new_landmark = np.array([newLandmark_x, newLandmark_y])
@@ -203,6 +208,10 @@ class EKFSLAM:
 
             # Temporarily adjust landmark number too
             temp_num_landmarks = self.num_landmarks + 1
+
+            # self.state = tempState
+            # self.covariance = tempCovariance
+            # self.num_landmarks = temp_num_landmarks
 
             # rospy.loginfo(f"\n Current obs loop: {observation_counter}")
 
@@ -388,23 +397,23 @@ class EKFSLAM:
             # rospy.loginfo(f"\n Shape: {self.state.shape}")
             # rospy.loginfo(f"\n State Vector:\n{self.state}")
             
-            rospy.loginfo("\n=== Covariance Matrix before Kalman Gain Calculation(self.covariance) ===")
+            # rospy.loginfo("\n=== Covariance Matrix before Kalman Gain Calculation(self.covariance) ===")
             # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
-            rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
+            # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
 
             # rospy.loginfo H_k_t matrix for the current calculation
-            rospy.loginfo(f"\n=== best_H_matrix Matrix before Kalman Gain Calculation ===")
+            # rospy.loginfo(f"\n=== best_H_matrix Matrix before Kalman Gain Calculation ===")
             # rospy.loginfo(f"\n Shape: {best_H_matrix.shape}")
-            rospy.loginfo(f"\n best_H_matrix:\n{best_H_matrix}")
+            # rospy.loginfo(f"\n best_H_matrix:\n{best_H_matrix}")
 
-            rospy.loginfo(f"\n=== inverse psi_list[best_landmark_index] Matrix before Kalman Gain Calculation ===")
+            # rospy.loginfo(f"\n=== inverse psi_list[best_landmark_index] Matrix before Kalman Gain Calculation ===")
             # rospy.loginfo(f"\n Shape: {psi_list[best_landmark_index].shape}")
-            rospy.loginfo(f"\n psi_list[best_landmark_index]:\n{np.linalg.inv(psi_list[best_landmark_index])}")
+            # rospy.loginfo(f"\n psi_list[best_landmark_index]:\n{np.linalg.inv(psi_list[best_landmark_index])}")
                 
             # Calculte Kalman gain and att it to the list
             Kalman_gain = self.covariance @ best_H_matrix.T @ np.linalg.inv(psi_list[best_landmark_index])
 
-            rospy.loginfo(f"Resulting Kalman Gain: {Kalman_gain}")
+            # rospy.loginfo(f"Resulting Kalman Gain: {Kalman_gain}")
 
             kalman_gain_list.append(Kalman_gain)
         
@@ -466,17 +475,17 @@ class EKFSLAM:
             # updateStateSum += K_t_i_ext @ measurement_residual
             # updateCovarianceSum += K_t_i_ext @ H_t_i_ext
 
-        rospy.loginfo(f"\n UpdateStateSum shape before update: {updateStateSum.shape}")
-        # rospy.loginfo(f"\n UpdateStateSum dim before update: {updateStateSum.ndim}")
-        rospy.loginfo(f"\n UpdateStateSum before update:\n{updateStateSum}")
+        # rospy.loginfo(f"\n UpdateStateSum shape before update: {updateStateSum.shape}")
+        # # rospy.loginfo(f"\n UpdateStateSum dim before update: {updateStateSum.ndim}")
+        # rospy.loginfo(f"\n UpdateStateSum before update:\n{updateStateSum}")
 
-        rospy.loginfo(f"\n updateCovarianceSum shape before update: {updateCovarianceSum.shape}")
-        # rospy.loginfo(f"\n updateCovarianceSum dim before update: {updateCovarianceSum.ndim}")
-        rospy.loginfo(f"\n updateCovarianceSum before update:\n{updateCovarianceSum}")
+        # rospy.loginfo(f"\n updateCovarianceSum shape before update: {updateCovarianceSum.shape}")
+        # # rospy.loginfo(f"\n updateCovarianceSum dim before update: {updateCovarianceSum.ndim}")
+        # rospy.loginfo(f"\n updateCovarianceSum before update:\n{updateCovarianceSum}")
 
-        self.state += updateStateSum
-        self.state[2] = self.utils.wrap_angle(self.state[2])  # Normalize the orientation angle
-        self.covariance = (np.eye(updateCovarianceSum.shape[0]) - updateCovarianceSum) @ self.covariance
+        # self.state += updateStateSum
+        # self.state[2] = self.utils.normalize_angle(self.state[2])  # Normalize the orientation angle
+        # self.covariance = (np.eye(updateCovarianceSum.shape[0]) - updateCovarianceSum) @ self.covariance
 
         # if np.any(self.covariance < 0):
         #     rospy.logerr("Negative value detected in covariance matrix in correction step at the end!")
