@@ -26,7 +26,7 @@ class Robot:
         self.lock = threading.Lock() # Thread lock so predict and correct dont collide
 
         # Publishers and subscribers
-        self.odom_sub = rospy.Subscriber('/odom', Odometry, self.odom_callback, queue_size=10)
+        self.odom_sub = rospy.Subscriber('/odom', Odometry, self.odom_callback, queue_size=1)
         self.laser_sub = rospy.Subscriber('/scan', LaserScan, self.scan_callback, queue_size=1)
         self.ground_truth_sub = rospy.Subscriber('/ground_truth/state', Odometry, self.ground_truth_callback, queue_size=1)
 
@@ -47,7 +47,7 @@ class Robot:
         # Clear the plot directories
         self.utils.clear_directory("../Spezialisierung-2/src/ekf_slam_pkg/plots/Covariance_Plots")
         self.utils.clear_directory("../Spezialisierung-2/src/ekf_slam_pkg/plots/H_Jacobian_Plots")
-        self.utils.clear_directory("../Spezialisierung-2/src/ekf_slam_pkg/plots/DBSCAN_Plots")
+        # self.utils.clear_directory("../Spezialisierung-2/src/ekf_slam_pkg/plots/DBSCAN_Plots")
 
 
 
@@ -62,9 +62,9 @@ class Robot:
             self.current_vel = self.utils.transform_odometry_to_world(msg)
         
 
-            rospy.loginfo("\n=== State Vector before prediction in robot (self.state) ===")
-            rospy.loginfo(f"\n Shape: {self.state.shape}")
-            rospy.loginfo(f"\n State Vector:\n{self.state}")
+            # rospy.loginfo("\n=== State Vector before prediction in robot (self.state) ===")
+            # rospy.loginfo(f"\n Shape: {self.state.shape}")
+            # rospy.loginfo(f"\n State Vector:\n{self.state}")
             
             # rospy.loginfo("\n=== Covariance Matrix before prediction in robot (self.covariance) ===")
             # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
@@ -75,9 +75,9 @@ class Robot:
             self.state = ekf_predicted_pose
             self.covariance = ekf_predicted_covariance
 
-            rospy.loginfo("\n=== State Vector after prediction in robot (self.state) ===")
-            rospy.loginfo(f"Shape: {self.state.shape}")
-            rospy.loginfo(f"State Vector:\n{self.state}")
+            # rospy.loginfo("\n=== State Vector after prediction in robot (self.state) ===")
+            # rospy.loginfo(f"Shape: {self.state.shape}")
+            # rospy.loginfo(f"State Vector:\n{self.state}")
             
             # rospy.loginfo("\n=== Covariance Matrix after prediction in robot (self.covariance) ===")
             # rospy.loginfo(f"Shape: {self.covariance.shape}")
@@ -93,25 +93,25 @@ class Robot:
 
         self.scan_message = msg
 
-        # with self.lock:
+        with self.lock:
         
-        #     ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
+            ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
 
-        #     self.state = ekf_corrected_pose
-        #     self.covariance = ekf_corrected_covariance
-        #     self.num_landmarks = num_landmarks
+            self.state = ekf_corrected_pose
+            self.covariance = ekf_corrected_covariance
+            self.num_landmarks = num_landmarks
 
-        #     # rospy.loginfo("\n === State Vector after correction in robot (self.state) ===")
-        #     # rospy.loginfo(f"\n Shape: {self.state.shape}")
-        #     # rospy.loginfo(f"\n State Vector:\n{self.state}")
+            # rospy.loginfo("\n === State Vector after correction in robot (self.state) ===")
+            # rospy.loginfo(f"\n Shape: {self.state.shape}")
+            # rospy.loginfo(f"\n State Vector:\n{self.state}")
             
-        #     # rospy.loginfo("\n=== Covariance Matrix after correction in robot (self.covariance) ===")
-        #     # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
-        #     # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
+            # rospy.loginfo("\n=== Covariance Matrix after correction in robot (self.covariance) ===")
+            # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
+            # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
         
-        #     self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
-        #     self.ekf_path.append(ekf_corrected_pose)
-        #     self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Red path
+            self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
+            self.ekf_path.append(ekf_corrected_pose)
+            self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Red path
             
 
 
@@ -197,42 +197,42 @@ class Robot:
         # Save EKF path to CSV
         self.utils.save_ekf_path_to_csv(path[-1])  # Save the last path point
 
-    # def publish_map(self, landmarks, namespace="landmarks", color=[1.0, 1.0, 0.0]):
-    #     marker = Marker()
-    #     marker.header.frame_id = "map"
-    #     marker.header.stamp = rospy.Time.now()
-    #     marker.ns = namespace
-    #     marker.id = 0
-    #     marker.type = Marker.POINTS
-    #     marker.action = Marker.ADD
-    #     marker.scale.x = 1  # Set the size of the points
-    #     marker.scale.y = 1
-    #     marker.color.r = color[0]
-    #     marker.color.g = color[1]
-    #     marker.color.b = color[2]
-    #     marker.color.a = 1.0  # Fully opaque
+    def publish_map(self, landmarks, namespace="landmarks", color=[1.0, 1.0, 0.0]):
+        marker = Marker()
+        marker.header.frame_id = "map"
+        marker.header.stamp = rospy.Time.now()
+        marker.ns = namespace
+        marker.id = 0
+        marker.type = Marker.POINTS
+        marker.action = Marker.ADD
+        marker.scale.x = 0.1  # Set the size of the points
+        marker.scale.y = 0.1
+        marker.color.r = color[0]
+        marker.color.g = color[1]
+        marker.color.b = color[2]
+        marker.color.a = 1.0  # Fully opaque
 
-    #     # Check if landmarks are available
-    #     # if len(landmarks) > 0:
-    #     #     # Add only the first landmark as a point
-    #     #     first_landmark = landmarks[0]
-    #     #     point = Point()
-    #     #     point.x = first_landmark[0]  # First landmark X coordinate
-    #     #     point.y = first_landmark[1]  # First landmark Y coordinate
-    #     #     point.z = 0                  # Landmarks are in 2D, so Z is 0
-    #     #     marker.points.append(point)
+        # Check if landmarks are available
+        # if len(landmarks) > 0:
+        #     # Add only the first landmark as a point
+        #     first_landmark = landmarks[0]
+        #     point = Point()
+        #     point.x = first_landmark[0]  # First landmark X coordinate
+        #     point.y = first_landmark[1]  # First landmark Y coordinate
+        #     point.z = 0                  # Landmarks are in 2D, so Z is 0
+        #     marker.points.append(point)
 
-    #     # Add landmarks as points
-    #     for lm in landmarks:
-    #         point = Point()
-    #         point.x = lm[0]  # Landmark X coordinate
-    #         point.y = lm[1]  # Landmark Y coordinate
-    #         point.z = 0      # Landmarks are in 2D, so Z is 0
-    #         marker.points.append(point)
+        # Add landmarks as points
+        for lm in landmarks:
+            point = Point()
+            point.x = lm[0]  # Landmark X coordinate
+            point.y = lm[1]  # Landmark Y coordinate
+            point.z = 0      # Landmarks are in 2D, so Z is 0
+            marker.points.append(point)
 
-    #     # # Publish the marker to the /slam_map topic
-    #     if self.map_pub.get_num_connections() > 0:
-    #         self.map_pub.publish(marker)
-    #     else:
-    #         rospy.logwarn("No subscribers to the map topic or the topic is closed.")
+        # # Publish the marker to the /slam_map topic
+        if self.map_pub.get_num_connections() > 0:
+            self.map_pub.publish(marker)
+        else:
+            rospy.logwarn("No subscribers to the map topic or the topic is closed.")
 

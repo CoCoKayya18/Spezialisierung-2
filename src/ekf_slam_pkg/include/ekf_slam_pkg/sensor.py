@@ -20,10 +20,6 @@ class Sensor:
             # Convert polar coordinates (range and angle) to Cartesian coordinates (x, y)
             angles = angles = angle_min + np.arange(len(ranges)) * angle_increment
 
-            # # Ensure angles array has the same length as ranges
-            # if len(angles) > len(ranges):
-            #     angles = angles[:len(ranges)]
-
             x_coords = ranges * np.cos(angles)
             y_coords = ranges * np.sin(angles)
 
@@ -48,9 +44,14 @@ class Sensor:
                 # Extract points belonging to the current cluster
                 cluster_points = valid_points[labels == label]
                 
-                # Calculate the mean of the cluster points as the feature location
-                cluster_center = cluster_points.mean(axis=0)
-                features.append(tuple(cluster_center))
+                cluster_center_x, cluster_center_y = cluster_points.mean(axis=0)
+
+                # Convert back to polar coordinates (r, phi)
+                r = np.sqrt(cluster_center_x**2 + cluster_center_y**2)
+                phi = np.arctan2(cluster_center_y, cluster_center_x)
+
+                # Append the polar coordinates (r, phi) to the features list
+                features.append((r, phi))
             
             # self.visualize_features(valid_points, labels, features)
 
