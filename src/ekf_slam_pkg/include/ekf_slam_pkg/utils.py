@@ -140,3 +140,20 @@ class Utils:
         polar_coordinates = [(r, phi) for r, phi in zip(valid_ranges, valid_angles)]
 
         return polar_coordinates
+
+    def visualize_expected_Observation(self, z_hat_list, correctionRun):
+        # Convert range and angle to Cartesian coordinates
+        x_coords = [z[0] * np.cos(z[1]) for z in z_hat_list]  # x = r * cos(theta)
+        y_coords = [z[0] * np.sin(z[1]) for z in z_hat_list]  # y = r * sin(theta)
+
+        # Create a scatter plot in Cartesian coordinates
+        plt.figure()
+        plt.scatter(x_coords, y_coords, c='b', marker='o')
+        plt.title("Laser Scan in Cartesian Coordinates")
+        plt.xlabel("X")
+        plt.ylabel("Y")
+        plt.axis('equal')  # Ensure aspect ratio is equal
+        plt.grid(True)
+        filename = f"../Spezialisierung-2/src/ekf_slam_pkg/plots/EstimatedObservations_Plots/Correction_{correctionRun}.png"
+        plt.savefig(filename)
+        plt.close()
