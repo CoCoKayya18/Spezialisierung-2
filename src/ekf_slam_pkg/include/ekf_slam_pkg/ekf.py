@@ -108,6 +108,7 @@ class EKFSLAM:
         kalman_gain_list = []
         best_z_hat_list = []
         best_H_Matrix_list = []
+        all_pi_list = []
         best_pi_list = []
 
         for z_i in z_t:
@@ -130,6 +131,8 @@ class EKFSLAM:
             tempCovariance[:n, :n] = self.covariance
             # Initialize landmark uncertainty proportional to the range measurement
             initial_landmark_uncertainty = (z_i[0] ** 2) / 130
+
+            # initial_landmark_uncertainty = 1000
 
             tempCovariance[n:, n:] = np.array([[initial_landmark_uncertainty, 0],
                                             [0, initial_landmark_uncertainty]])
@@ -162,7 +165,13 @@ class EKFSLAM:
                 H_k_t = self.map.compute_H_k_t(delta_k, q_k, F_x_k)
 
                 # Compute Mahalanobis distance
-                pi_k, Psi_k = self.map.compute_mahalanobis_distance(z_i, z_hat_k, H_k_t, tempCovariance, self.measurement_noise)
+                
+                Psi_k = H_k_t @ tempCovariance @ H_k_t.T + self.measurement_noise
+
+                pi_k = (z_i - z_hat_k).T @ np.linalg.inv(Psi_k) @ (z_i - z_hat_k)
+
+                rospy.loginfo(f"Pi value for obs {observation_counter} and lm {landmark_counter}: {pi_k}")
+                rospy.loginfo(f"Psi value for obs {observation_counter} and lm {landmark_counter}: {Psi_k}")
 
                 # Create plots for H_Matrix jacobian and Covariance matrix
                 # self.utils.save_covariance_matrix_plot(self.covariance, observation_counter, landmark_counter)
@@ -217,9 +226,16 @@ class EKFSLAM:
             best_H_Matrix_list.append(best_H_matrix)
             best_z_hat_list.append(best_z_hat)
             best_pi_list.append(pi_list[best_landmark_index])
+            all_pi_list.append(pi_list)
                 
             # Calculte Kalman gain and att it to the list
             Kalman_gain = self.covariance @ best_H_matrix.T @ np.linalg.inv(psi_list[best_landmark_index])
+
+            kalman_gain_norm = np.linalg.norm(Kalman_gain)
+            # print(f"Kalman gain norm for observation {i}: {kalman_gain_norm}")
+
+            if kalman_gain_norm > 1e3 or kalman_gain_norm < 1e-3:
+                rospy.logwarn(f"Warning: Kalman gain for observation {i} has abnormal magnitude: {kalman_gain_norm}")
 
             kalman_gain_list.append(Kalman_gain)
         
@@ -229,6 +245,7 @@ class EKFSLAM:
         updateCovarianceSum = np.zeros_like(self.covariance)
 
         # rospy.loginfo(f"Best pi list: {best_pi_list}")
+        # rospy.loginfo(f"Pi list: {all_pi_list}")
         # rospy.loginfo(f"Best z hat list: {best_z_hat_list}")
         # rospy.loginfo(f"Z_t list: {z_t}")
 
@@ -256,17 +273,19 @@ class EKFSLAM:
 
             updateCovarianceSum[state_indices, state_indices] += covariance_update
 
-        rospy.loginfo(f"\n UpdateStateSum before update:\n{updateStateSum}")
+            eigenvalues, _ = np.linalg.eig(updateCovarianceSum)
+            eigenvalues[eigenvalues < 1e-6] = 1e-6
 
-        rospy.loginfo(f"\n updateCovarianceSum before update:\n{updateCovarianceSum}")
+
+        # rospy.loginfo(f"\n UpdateStateSum before update:\n{updateStateSum}")
+
+        # rospy.loginfo(f"\n updateCovarianceSum before update:\n{updateCovarianceSum}")
+
+        eigenvalues, _ = np.linalg.eig(updateCovarianceSum)
 
         self.state += updateStateSum
         self.state[2] = self.utils.normalize_angle(self.state[2])  # Normalize the orientation angle
         self.covariance = (np.eye(updateCovarianceSum.shape[0]) - updateCovarianceSum) @ self.covariance
-
-        # rospy.loginfo(f"\n State Vector:\n{self.state}")
-        
-        # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
 
         rospy.loginfo("\n === CORRECTION FINISHED ====== CORRECTION FINISHED ======")
 

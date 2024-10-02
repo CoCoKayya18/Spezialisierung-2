@@ -61,27 +61,14 @@ class Robot:
 
             self.current_vel = self.utils.transform_odometry_to_world(msg)
         
-
-            # rospy.loginfo("\n=== State Vector before prediction in robot (self.state) ===")
-            # rospy.loginfo(f"\n Shape: {self.state.shape}")
             # rospy.loginfo(f"\n State Vector:\n{self.state}")
-            
-            # rospy.loginfo("\n=== Covariance Matrix before prediction in robot (self.covariance) ===")
-            # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
+
             # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
 
             ekf_predicted_pose, ekf_predicted_covariance = self.ekf_slam.predict(self.current_vel, self.state, self.covariance, self.num_landmarks)  # Run the EKF prediction
             
             self.state = ekf_predicted_pose
             self.covariance = ekf_predicted_covariance
-
-            # rospy.loginfo("\n=== State Vector after prediction in robot (self.state) ===")
-            # rospy.loginfo(f"Shape: {self.state.shape}")
-            # rospy.loginfo(f"State Vector:\n{self.state}")
-            
-            # rospy.loginfo("\n=== Covariance Matrix after prediction in robot (self.covariance) ===")
-            # rospy.loginfo(f"Shape: {self.covariance.shape}")
-            # rospy.loginfo(f"Covariance Matrix:\n{self.covariance}")
             
             self.ekf_path.append(ekf_predicted_pose)
             self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
@@ -101,12 +88,8 @@ class Robot:
             self.covariance = ekf_corrected_covariance
             self.num_landmarks = num_landmarks
 
-            # rospy.loginfo("\n === State Vector after correction in robot (self.state) ===")
-            # rospy.loginfo(f"\n Shape: {self.state.shape}")
             # rospy.loginfo(f"\n State Vector:\n{self.state}")
-            
-            # rospy.loginfo("\n=== Covariance Matrix after correction in robot (self.covariance) ===")
-            # rospy.loginfo(f"\n Shape: {self.covariance.shape}")
+
             # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
         
             self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
