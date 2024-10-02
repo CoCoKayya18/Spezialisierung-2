@@ -168,10 +168,11 @@ class EKFSLAM:
                 
                 Psi_k = H_k_t @ tempCovariance @ H_k_t.T + self.measurement_noise
 
-                pi_k = (z_i - z_hat_k).T @ np.linalg.inv(Psi_k) @ (z_i - z_hat_k)
+                measurement_residual_k = z_i - z_hat_k
 
-                rospy.loginfo(f"Pi value for obs {observation_counter} and lm {landmark_counter}: {pi_k}")
-                rospy.loginfo(f"Psi value for obs {observation_counter} and lm {landmark_counter}: {Psi_k}")
+                measurement_residual_k[1] = self.utils.normalize_angle(measurement_residual_k[1])
+
+                pi_k = (measurement_residual_k).T @ np.linalg.inv(Psi_k) @ (measurement_residual_k)
 
                 # Create plots for H_Matrix jacobian and Covariance matrix
                 # self.utils.save_covariance_matrix_plot(self.covariance, observation_counter, landmark_counter)
@@ -191,9 +192,7 @@ class EKFSLAM:
             j_i = min(pi_list)
             best_landmark_index = pi_list.index(j_i)
 
-            # rospy.loginfo(f"pi-list: {pi_list}")
-            # rospy.loginfo(f"j_i: {j_i}")
-            # rospy.loginfo(f"best_landmark_index: {best_landmark_index}")
+            rospy.loginfo(f"best_landmark_index: {best_landmark_index}")
 
             # Check if a new landmark is being added
             if best_landmark_index >= self.num_landmarks:
@@ -231,11 +230,11 @@ class EKFSLAM:
             # Calculte Kalman gain and att it to the list
             Kalman_gain = self.covariance @ best_H_matrix.T @ np.linalg.inv(psi_list[best_landmark_index])
 
-            kalman_gain_norm = np.linalg.norm(Kalman_gain)
-            # print(f"Kalman gain norm for observation {i}: {kalman_gain_norm}")
+            # rospy.loginfo(f"Kalman gain at obs {observation_counter}: {Kalman_gain}")
+            # rospy.loginfo(f"H Matrix at obs {observation_counter}: {best_H_matrix}")
+            # rospy.loginfo(f"Covariance at obs {observation_counter}: {self.covariance}")
+            # rospy.loginfo(f"Psi inverse at obs {observation_counter}: {np.linalg.inv(psi_list[best_landmark_index])}")
 
-            if kalman_gain_norm > 1e3 or kalman_gain_norm < 1e-3:
-                rospy.logwarn(f"Warning: Kalman gain for observation {i} has abnormal magnitude: {kalman_gain_norm}")
 
             kalman_gain_list.append(Kalman_gain)
         
@@ -248,6 +247,7 @@ class EKFSLAM:
         # rospy.loginfo(f"Pi list: {all_pi_list}")
         # rospy.loginfo(f"Best z hat list: {best_z_hat_list}")
         # rospy.loginfo(f"Z_t list: {z_t}")
+        # rospy.loginfo(f"Kalman Gain list: {kalman_gain_list}")
 
         for i, K_t_i in enumerate(kalman_gain_list):
 
@@ -257,15 +257,14 @@ class EKFSLAM:
 
             measurement_residual = measurement_residual.reshape(-1, 1)
 
-            # rospy.loginfo(f"z_t[i]: {z_t[i]}")
-            # rospy.loginfo(f"best z_hat: {best_z_hat_list[i]}")
-            # rospy.loginfo(f"Measurement residual: {measurement_residual}")
-
-            # rospy.loginfo(f"K_t_i: {K_t_i}")
+            rospy.loginfo(f"Kalman gain at iteration {i}: {K_t_i}")
+            rospy.loginfo(f"H Matrix at iteration {i}: {best_H_Matrix_list[i]}")
 
             state_update = K_t_i @ measurement_residual
 
             covariance_update = K_t_i @ best_H_Matrix_list[i]
+
+            rospy.loginfo(f"Calculated covariance update at iteration {i}: {covariance_update}")
 
             state_indices = slice(0, K_t_i.shape[0])
 
@@ -273,19 +272,29 @@ class EKFSLAM:
 
             updateCovarianceSum[state_indices, state_indices] += covariance_update
 
-            eigenvalues, _ = np.linalg.eig(updateCovarianceSum)
-            eigenvalues[eigenvalues < 1e-6] = 1e-6
+            rospy.loginfo(f"UpdateCovarianceSum at iteration {i}: {updateCovarianceSum}")
 
 
         # rospy.loginfo(f"\n UpdateStateSum before update:\n{updateStateSum}")
 
         # rospy.loginfo(f"\n updateCovarianceSum before update:\n{updateCovarianceSum}")
 
-        eigenvalues, _ = np.linalg.eig(updateCovarianceSum)
+        eigenvalues, _ = np.linalg.eig(self.covariance)
+
+        if np.any(eigenvalues <= 0):
+            rospy.logwarn(f"Warning: Negative or zero eigenvalues detected in updateCovarianceSum before applying final covariance update: {self.covariance}")
+
+        # rospy.loginfo(f"State before update: {self.state}")
+        # rospy.loginfo(f"Covariance before update: {self.covariance}")
 
         self.state += updateStateSum
         self.state[2] = self.utils.normalize_angle(self.state[2])  # Normalize the orientation angle
         self.covariance = (np.eye(updateCovarianceSum.shape[0]) - updateCovarianceSum) @ self.covariance
+
+        rospy.loginfo(f"Identity minus sum: {np.eye(updateCovarianceSum.shape[0]) - updateCovarianceSum}")
+
+        # rospy.loginfo(f"State after update: {self.state}")
+        # rospy.loginfo(f"Covariance after update: {self.covariance}")
 
         rospy.loginfo("\n === CORRECTION FINISHED ====== CORRECTION FINISHED ======")
 
