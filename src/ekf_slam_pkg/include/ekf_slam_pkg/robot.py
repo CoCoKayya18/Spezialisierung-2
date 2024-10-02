@@ -74,7 +74,7 @@ class Robot:
             self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
 
             # Save odom velocities to CSV
-            self.utils.save_odom_velocities_to_csv(msg)
+            # self.utils.save_odom_velocities_to_csv(msg)
 
     def scan_callback(self, msg):
 
@@ -103,7 +103,7 @@ class Robot:
         self.publish_GT_path(self.ground_truth_path, "ground_truth_path", [0.0, 1.0, 0.0])  # Green path
 
         # Save ground truth path to CSV
-        self.utils.save_ground_truth_path_to_csv(msg.pose.pose)
+        # self.utils.save_ground_truth_path_to_csv(msg.pose.pose)
 
     def publish_GT_path(self, path, namespace, color):
         marker = Marker()
@@ -178,7 +178,7 @@ class Robot:
             rospy.logwarn("No subscribers to the EKF path topic or the topic is closed.")
 
         # Save EKF path to CSV
-        self.utils.save_ekf_path_to_csv(path[-1])  # Save the last path point
+        # self.utils.save_ekf_path_to_csv(path[-1])  # Save the last path point
 
     def publish_map(self, landmarks, namespace="landmarks", color=[1.0, 1.0, 0.0]):
         marker = Marker()

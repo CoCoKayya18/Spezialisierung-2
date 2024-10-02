@@ -21,6 +21,7 @@ class Sensor:
             angles = angles = angle_min + np.arange(len(ranges)) * angle_increment
 
             x_coords = ranges * np.cos(angles)
+
             y_coords = ranges * np.sin(angles)
 
             # Stack x and y coordinates into a single array
