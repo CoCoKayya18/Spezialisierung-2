@@ -52,10 +52,6 @@ class Map:
         return F_x_k
 
     def compute_H_k_t(self, delta_k, q_k, F_x_k):
-        """
-        Computes the H_k_t matrix.
-        """
-        # print(f"\n F_x_k : {F_x_k.shape}\n{F_x_k}")
 
         # As i am not using any signatures for the landmark, the H matrix gets reduced
         H_k_t = (1 / q_k) * np.array([
