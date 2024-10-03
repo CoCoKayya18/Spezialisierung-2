@@ -47,7 +47,7 @@ class Robot:
         # Clear the plot directories
         self.utils.clear_directory("../Spezialisierung-2/src/ekf_slam_pkg/plots/Covariance_Plots")
         self.utils.clear_directory("../Spezialisierung-2/src/ekf_slam_pkg/plots/H_Jacobian_Plots")
-        # self.utils.clear_directory("../Spezialisierung-2/src/ekf_slam_pkg/plots/DBSCAN_Plots")
+        self.utils.clear_directory("../Spezialisierung-2/src/ekf_slam_pkg/plots/DBSCAN_Plots")
 
 
 
@@ -70,7 +70,10 @@ class Robot:
             self.state = ekf_predicted_pose
             self.covariance = ekf_predicted_covariance
             
-            self.ekf_path.append(ekf_predicted_pose)
+            # self.ekf_path.append(ekf_predicted_pose)
+
+            # rospy.loginfo(self.ekf_path)
+
             self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
 
             # Save odom velocities to CSV
@@ -81,6 +84,8 @@ class Robot:
         self.scan_message = msg
 
         with self.lock:
+
+            # rospy.loginfo(f"\n State Vector before correction:\n{self.state}")
         
             ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
 
@@ -94,7 +99,10 @@ class Robot:
         
             self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
             self.ekf_path.append(ekf_corrected_pose)
-            self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Red path
+
+            rospy.loginfo(self.ekf_path)
+
+            self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
             
 
 
