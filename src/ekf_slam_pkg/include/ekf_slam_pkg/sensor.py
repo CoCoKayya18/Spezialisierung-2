@@ -30,6 +30,10 @@ class Sensor:
             # Remove points with invalid ranges (e.g., 0 or inf values)
             valid_points = points[np.isfinite(points).all(axis=1)]
 
+            if valid_points.size == 0:
+                rospy.loginfo("No valid points found in the scan data.")
+                return []
+
             # Apply DBSCAN clustering algorithm
             db = DBSCAN(eps=eps, min_samples=min_samples).fit(valid_points)
             labels = db.labels_
