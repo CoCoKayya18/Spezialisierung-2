@@ -113,12 +113,12 @@ def calculate_cumulative_path(deltas):
 
 def main(use_old_test_data=False):
     # Define file paths
-    odom_velocities_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/odom_velocities.csv'  # Replace with the path to your odom_velocities.csv
-    ground_truth_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/ground_truth_path.csv'  # Replace with the path to your ground_truth_path.csv
+    odom_velocities_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/odom_velocities.csv'  # Replace with the path to your odom_velocities.csv
+    ground_truth_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ground_truth_path.csv'  # Replace with the path to your ground_truth_path.csv
     old_test_data_path = '../Spezialisierung-1/src/slam_pkg/data/square_single/training/FullData/odomVel/sparse_test_data_square_odometry_single.csv'  # Replace with the path to your old test data CSV
-    scaler_x_path = '../Spezialisierung-2/src/ekf_slam_pkg/Scaler/sparse_scaler_X_random3_odometry.pkl'  # Replace with the path to your scaler X file
-    scaler_y_path = '../Spezialisierung-2/src/ekf_slam_pkg/Scaler/sparse_scaler_Y_random3_odometry.pkl'  # Replace with the path to your scaler Y file
-    model_path = '../Spezialisierung-2/src/ekf_slam_pkg/myMLModel/sparse_gpy_model_random3_odometry.pkl'  # Replace with the path to your trained model file
+    scaler_x_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/Scaler/sparse_scaler_X_random3_odometry.pkl'  # Replace with the path to your scaler X file
+    scaler_y_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/Scaler/sparse_scaler_Y_random3_odometry.pkl'  # Replace with the path to your scaler Y file
+    model_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/myMLModel/sparse_gpy_model_random3_odometry.pkl'  # Replace with the path to your trained model file
     plot_dir = 'plots'  # Directory to save plots
 
     # Load data based on the boolean flag
