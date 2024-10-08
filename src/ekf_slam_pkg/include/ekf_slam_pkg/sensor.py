@@ -68,7 +68,7 @@ class Sensor:
         # Extract features using DBSCAN
         # features, labels, valid_points = self.extract_features_from_scan(scan_data, angle_min, angle_max, angle_increment, eps, min_samples)
 
-        save_dir = '../Spezialisierung-2/src/ekf_slam_pkg/plots/DBSCAN_Plots'
+        save_dir = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/DBSCAN_Plots'
 
         # Check if this is the first call
         # if self.first_call:

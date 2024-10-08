@@ -15,9 +15,9 @@ class Utils:
         rospy.loginfo("Utils class initialized")
 
         # For the csv files
-        self.ground_truth_csv_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/ground_truth_path.csv'
-        self.ekf_path_csv_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/ekf_path.csv'
-        self.odom_velocities_csv_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/odom_velocities.csv'
+        self.ground_truth_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ground_truth_path.csv'
+        self.ekf_path_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ekf_path.csv'
+        self.odom_velocities_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/odom_velocities.csv'
 
     def update_pose_from_state(self, pose, x, y, theta):
         # Helper function to update the robot's pose from state vector
@@ -106,7 +106,7 @@ class Utils:
         plt.title(f'Covariance Matrix (Obs: {observation_loop}, LM: {landmark_loop})')
 
         # Save the plot with observation and landmark loop in filename
-        filename = f"../Spezialisierung-2/src/ekf_slam_pkg/plots/Covariance_Plots/cov_matrix_obs_{observation_loop}_lm_{landmark_loop}.png"
+        filename = f"/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/Covariance_Plots/cov_matrix_obs_{observation_loop}_lm_{landmark_loop}.png"
         plt.savefig(filename)
         plt.close()
 
@@ -117,7 +117,7 @@ class Utils:
         plt.title(f'H Jacobian (Obs: {observation_loop}, LM: {landmark_loop})')
 
         # Save the plot with observation and landmark loop in filename
-        filename = f"../Spezialisierung-2/src/ekf_slam_pkg/plots/H_Jacobian_Plots/jacobian_obs_{observation_loop}_lm_{landmark_loop}.png"
+        filename = f"/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/H_Jacobian_Plots/jacobian_obs_{observation_loop}_lm_{landmark_loop}.png"
         plt.savefig(filename)
         plt.close()
         
@@ -154,6 +154,6 @@ class Utils:
         plt.ylabel("Y")
         plt.axis('equal')  # Ensure aspect ratio is equal
         plt.grid(True)
-        filename = f"../Spezialisierung-2/src/ekf_slam_pkg/plots/EstimatedObservations_Plots/Correction_{correctionRun}.png"
+        filename = f"/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/EstimatedObservations_Plots/Correction_{correctionRun}.png"
         plt.savefig(filename)
         plt.close()
