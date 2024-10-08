@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import CheckButtons
 
 # Load the data from CSV files
-ekf_data_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/ekf_path.csv'  # Replace with the path to your EKF data CSV file
-ground_truth_data_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/ground_truth_path.csv'  # Replace with the path to your ground truth data CSV file
+ekf_data_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ekf_path.csv'  # Replace with the path to your EKF data CSV file
+ground_truth_data_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ground_truth_path.csv'  # Replace with the path to your ground truth data CSV file
 
 # Read EKF data
 ekf_df = pd.read_csv(ekf_data_path)

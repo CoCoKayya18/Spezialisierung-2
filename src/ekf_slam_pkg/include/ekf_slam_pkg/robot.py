@@ -34,20 +34,20 @@ class Robot:
         self.EKF_path_pub = rospy.Publisher('/EKF_Path', Marker, queue_size=10)
         self.map_pub = rospy.Publisher('/slam_map', Marker, queue_size=10)
         
-        self.current_pose = None
+        self.current_pose = None    
         self.current_vel = np.zeros((3, 1))
         self.ground_truth_path = []
         self.ekf_path = []
         self.filtered_points = []
 
-        ground_truth_csv_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/ground_truth_path.csv'
-        ekf_path_csv_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/ekf_path.csv'
-        odom_velocities_csv_path = '../Spezialisierung-2/src/ekf_slam_pkg/data/odom_velocities.csv'
+        ground_truth_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ground_truth_path.csv'
+        ekf_path_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ekf_path.csv'
+        odom_velocities_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/odom_veloc ities.csv'
 
         # Clear the plot directories
-        self.utils.clear_directory("../Spezialisierung-2/src/ekf_slam_pkg/plots/Covariance_Plots")
-        self.utils.clear_directory("../Spezialisierung-2/src/ekf_slam_pkg/plots/H_Jacobian_Plots")
-        self.utils.clear_directory("../Spezialisierung-2/src/ekf_slam_pkg/plots/DBSCAN_Plots")
+        self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/Covariance_Plots")
+        self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/H_Jacobian_Plots")
+        self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/DBSCAN_Plots")
 
 
 
