@@ -7,7 +7,7 @@ from tf.transformations import quaternion_from_euler
 import os
 import math
 
-GOAL_FILE_PATH = '../Spezialisierung-1/src/slam_pkg/rosbag_files/random3/goals.txt'
+GOAL_FILE_PATH = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/Goals.txt'
 ROTATION_TIMEOUT = 30  # Timeout for rotation in seconds
 MAX_RETRIES = 5  # Maximum number of retries for a goal
 

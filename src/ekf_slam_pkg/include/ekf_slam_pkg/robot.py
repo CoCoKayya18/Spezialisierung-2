@@ -100,7 +100,7 @@ class Robot:
             self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
             self.ekf_path.append(ekf_corrected_pose)
 
-            rospy.loginfo(self.ekf_path)
+            # rospy.loginfo(self.ekf_path)
 
             self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
             
