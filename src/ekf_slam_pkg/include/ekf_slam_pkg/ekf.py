@@ -157,9 +157,16 @@ class EKFSLAM:
                 q_k = np.dot(delta_k.T, delta_k).item()
                 
                 z_hat_k = np.array([np.sqrt(q_k), np.arctan2(delta_k[1].item(), delta_k[0].item()) - theta])
+                
+                'The calculation of delta and q_k seem fine, as the z_hat_k is very close to the correct z_i'
+                # rospy.loginfo(f"Observed measurement at obs {observation_counter}: {z_i}")
+                # rospy.loginfo(f"Predicted Measurement at LM {landmark_counter}: {z_hat_k}")
 
+                ' F matrix structure seems to be correct'
                 # Compute F_x,k matrix
                 F_x_k = self.map.compute_F_x_k(temp_num_landmarks, k)
+                
+                # rospy.loginfo(f"F matrix at obs {observation_counter} and lm {landmark_counter}: {F_x_k}")
 
                 # Compute H^k_t matrix
                 H_k_t = self.map.compute_H_k_t(delta_k, q_k, F_x_k)
@@ -199,7 +206,7 @@ class EKFSLAM:
             # Check if a new landmark is being added
             if best_landmark_index >= self.num_landmarks:
 
-                rospy.loginfo(f"\n ADDING NEW LANDMARK at obs {observation_counter}, landmark {landmark_counter}")
+                # rospy.loginfo(f"\n ADDING NEW LANDMARK at obs {observation_counter}, landmark {landmark_counter}")
 
                 # Update state vector to include the new landmark
                 self.state = tempState
@@ -215,13 +222,21 @@ class EKFSLAM:
 
                 # Measurement is associated with an existing landmark
 
-                rospy.loginfo(f"\n not adding new landmark at obs {observation_counter}, landmark {landmark_counter}")
-
                 best_H_matrix = H_matrix_list[best_landmark_index]
                 best_H_matrix = best_H_matrix[:, :self.num_landmarks * 2 + 3]  # Truncate H matrix
                 best_z_hat = z_hat_list[best_landmark_index]
-
+                
                 temp_num_landmarks -= 1
+                
+                # rospy.loginfo(f"\n MATCHED OBSERVATION {observation_counter} WITH LANDMARK {best_landmark_index} "
+                #               f"at position {new_landmark}, "
+                #               f"Observation Data: {z_i}, "
+                #               f"Predicted Measurement: {best_z_hat}, "
+                #               f"Covariance: {self.covariance}, "
+                #               f"Match Quality: {pi_list.index(j_i)}, "
+                #               f"Total Landmarks: {self.num_landmarks}")
+
+
             
             # Add both variables to the list for later
             best_H_Matrix_list.append(best_H_matrix)
@@ -282,10 +297,6 @@ class EKFSLAM:
 
         # rospy.loginfo(f"\n updateCovarianceSum before update:\n{updateCovarianceSum}")
 
-        eigenvalues, _ = np.linalg.eig(self.covariance)
-
-        if np.any(eigenvalues <= 0):
-            rospy.logwarn(f"Warning: Negative or zero eigenvalues detected in updateCovarianceSum before applying final covariance update: {self.covariance}")
 
         # rospy.loginfo(f"State before update: {self.state}")
         # rospy.loginfo(f"Covariance before update: {self.covariance}")
@@ -293,6 +304,11 @@ class EKFSLAM:
         self.state += updateStateSum
         self.state[2] = self.utils.normalize_angle(self.state[2])  # Normalize the orientation angle
         self.covariance = (np.eye(updateCovarianceSum.shape[0]) - updateCovarianceSum) @ self.covariance
+        
+        eigenvalues, _ = np.linalg.eig(self.covariance)
+
+        if np.any(eigenvalues <= 0):
+            rospy.logwarn(f"Warning: Negative or zero eigenvalues detected in self.covariance before applying final covariance update: {self.covariance}")
 
         # rospy.loginfo(f"Identity minus sum: {np.eye(updateCovarianceSum.shape[0]) - updateCovarianceSum}")
 

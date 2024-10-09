@@ -54,10 +54,17 @@ class Map:
     def compute_H_k_t(self, delta_k, q_k, F_x_k):
 
         # As i am not using any signatures for the landmark, the H matrix gets reduced
+        # Thrun Implementation
         H_k_t = (1 / q_k) * np.array([
             [np.sqrt(q_k) * delta_k[0].item(), -np.sqrt(q_k) * delta_k[1].item(), 0, -np.sqrt(q_k) * delta_k[0].item(), np.sqrt(q_k) * delta_k[1].item()],
             [delta_k[1].item(), delta_k[0].item(), -1, -delta_k[1].item(), -delta_k[0].item()]
         ]) 
+        
+        # #  Cyrill Stachniss implementation
+        # H_k_t = (1 / q_k) * np.array([
+        #     [- np.sqrt(q_k) * delta_k[0].item(), -np.sqrt(q_k) * delta_k[1].item(), 0, np.sqrt(q_k) * delta_k[0].item(), np.sqrt(q_k) * delta_k[1].item()],
+        #     [delta_k[1].item(), -delta_k[0].item(), -1, -delta_k[1].item(), delta_k[0].item()]
+        # ]) 
 
         H_k_t = H_k_t @ F_x_k
 
