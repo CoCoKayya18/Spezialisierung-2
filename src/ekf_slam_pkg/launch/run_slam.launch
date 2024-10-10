@@ -19,8 +19,8 @@
 
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <!-- <arg name="world_name" value="$(find turtlebot3_gazebo)/worlds/turtlebot3_world.world"/> -->
-    <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/myWorld.world"/>
-    <!-- <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/mySimpleWorld.world"/> -->
+    <!-- <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/myWorld.world"/> -->
+    <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/mySimpleWorld.world"/>
     <arg name="paused" value="false"/>
     <arg name="use_sim_time" value="true"/>
     <arg name="gui" value="false"/>
@@ -71,6 +71,6 @@
   <!-- <arg name="node_start_delay" default="1.0" /> -->
 
   <node name="main" pkg="ekf_slam_pkg" type="main.py" output="screen"> </node>
-  <node name="SendGoal" pkg="ekf_slam_pkg" type="SendGoal.py" output="screen"> </node>
+  <!-- <node name="SendGoal" pkg="ekf_slam_pkg" type="SendGoal.py" output="screen"> </node> -->
 
 </launch>
