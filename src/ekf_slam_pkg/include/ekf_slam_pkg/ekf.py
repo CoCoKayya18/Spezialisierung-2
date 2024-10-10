@@ -170,10 +170,16 @@ class EKFSLAM:
 
                 # Compute H^k_t matrix
                 H_k_t = self.map.compute_H_k_t(delta_k, q_k, F_x_k)
-
+            
                 # Compute Mahalanobis distance
                 
                 Psi_k = H_k_t @ tempCovariance @ H_k_t.T + self.measurement_noise
+                
+                eigenvalues, _ = np.linalg.eig(Psi_k)
+
+                if np.any(eigenvalues <= 0):
+                    rospy.logwarn(f"Warning: Negative or zero eigenvalues detected in Psi_k: {Psi_k}")
+
 
                 measurement_residual_k = z_i - z_hat_k
 
@@ -181,17 +187,11 @@ class EKFSLAM:
 
                 pi_k = (measurement_residual_k).T @ np.linalg.inv(Psi_k) @ (measurement_residual_k)
 
-                # Create plots for H_Matrix jacobian and Covariance matrix
-                # self.utils.save_covariance_matrix_plot(self.covariance, observation_counter, landmark_counter)
-                # self.utils.save_jacobian_plot(H_k_t, observation_counter, landmark_counter)
-
                 # Add the calculated values to the list
                 H_matrix_list.append(H_k_t)
                 psi_list.append(Psi_k)
                 pi_list.append(pi_k)
                 z_hat_list.append(z_hat_k)
-
-                # Überprüfe letztes pi
             
             # End Landmark Loop
 
@@ -206,7 +206,7 @@ class EKFSLAM:
             # Check if a new landmark is being added
             if best_landmark_index >= self.num_landmarks:
 
-                # rospy.loginfo(f"\n ADDING NEW LANDMARK at obs {observation_counter}, landmark {landmark_counter}")
+                rospy.loginfo(f"\n ADDING NEW LANDMARK at obs {observation_counter}, landmark {landmark_counter}")
 
                 # Update state vector to include the new landmark
                 self.state = tempState
@@ -241,8 +241,14 @@ class EKFSLAM:
             # Add both variables to the list for later
             best_H_Matrix_list.append(best_H_matrix)
             best_z_hat_list.append(best_z_hat)
-            best_pi_list.append(pi_list[best_landmark_index])
+            
+            # rospy.loginfo(f"current z_i: {z_i}")
+            # rospy.loginfo(f"best_z_hat: {best_z_hat}")
+            
+            # best_pi_list.append(pi_list[best_landmark_index])
             # all_pi_list.append(pi_list)
+            
+            # rospy.loginfo(f"Inverse of psi: {np.linalg.inv(psi_list[best_landmark_index])}")
                 
             # Calculte Kalman gain and att it to the list
             Kalman_gain = self.covariance @ best_H_matrix.T @ np.linalg.inv(psi_list[best_landmark_index])
@@ -252,8 +258,16 @@ class EKFSLAM:
             # rospy.loginfo(f"Covariance at obs {observation_counter}: {self.covariance}")
             # rospy.loginfo(f"Psi inverse at obs {observation_counter}: {np.linalg.inv(psi_list[best_landmark_index])}")
 
-
             kalman_gain_list.append(Kalman_gain)
+            
+            # rospy.loginfo(f"Best h_matrix: {best_H_matrix}")
+            # rospy.loginfo(f"Kalman Gain: {Kalman_gain}")
+            
+            # Create plots for H_Matrix jacobian and Covariance matrix
+            # self.utils.save_covariance_matrix_plot(self.covariance, observation_counter, landmark_counter)
+            # self.utils.save_jacobian_plot(best_H_matrix, observation_counter, landmark_counter)
+            # self.utils.save_psi_plot(psi_list[best_landmark_index], observation_counter, landmark_counter)
+            # self.utils.save_kalman_plot(Kalman_gain, observation_counter, landmark_counter)
         
         # end of observation loop   
         
@@ -274,15 +288,18 @@ class EKFSLAM:
             measurement_residual[1] = self.utils.normalize_angle(measurement_residual[1])
 
             measurement_residual = measurement_residual.reshape(-1, 1)
+            
+            # rospy.loginfo(f"z_t: {z_t[i]}")
+            # rospy.loginfo(f"z_hat: {best_z_hat_list[i]}")
 
-            # rospy.loginfo(f"Kalman gain at iteration {i}: {K_t_i}")
-            # rospy.loginfo(f"H Matrix at iteration {i}: {best_H_Matrix_list[i]}")
+            rospy.loginfo(f"Kalman gain at iteration {i}: {K_t_i}")
+            rospy.loginfo(f"H Matrix at iteration {i}: {best_H_Matrix_list[i]}")
 
             state_update = K_t_i @ measurement_residual
 
             covariance_update = K_t_i @ best_H_Matrix_list[i]
 
-            # rospy.loginfo(f"Calculated covariance update at iteration {i}: {covariance_update}")
+            rospy.loginfo(f"Calculated covariance update at iteration {i}: {covariance_update}")
 
             state_indices = slice(0, K_t_i.shape[0])
 
@@ -290,12 +307,12 @@ class EKFSLAM:
 
             updateCovarianceSum[state_indices, state_indices] += covariance_update
 
-            # rospy.loginfo(f"UpdateCovarianceSum at iteration {i}: {updateCovarianceSum}")
+            rospy.loginfo(f"UpdateCovarianceSum at iteration {i}: {updateCovarianceSum}")
 
 
         # rospy.loginfo(f"\n UpdateStateSum before update:\n{updateStateSum}")
 
-        # rospy.loginfo(f"\n updateCovarianceSum before update:\n{updateCovarianceSum}")
+        rospy.loginfo(f"\n updateCovarianceSum before update:\n{updateCovarianceSum}")
 
 
         # rospy.loginfo(f"State before update: {self.state}")
@@ -314,6 +331,8 @@ class EKFSLAM:
 
         # rospy.loginfo(f"State after update: {self.state}")
         # rospy.loginfo(f"Covariance after update: {self.covariance}")
+        
+        self.utils.save_covariance_matrix_plot(self.covariance, observation_counter - 100, landmark_counter - 100)
 
         rospy.loginfo("\n === CORRECTION FINISHED ====== CORRECTION FINISHED ======")
 

@@ -117,7 +117,29 @@ class Utils:
         plt.title(f'H Jacobian (Obs: {observation_loop}, LM: {landmark_loop})')
 
         # Save the plot with observation and landmark loop in filename
-        filename = f"/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/H_Jacobian_Plots/jacobian_obs_{observation_loop}_lm_{landmark_loop}.png"
+        filename = f"/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/H_Jacobian_Plots/h_jacobian_obs_{observation_loop}_lm_{landmark_loop}.png"
+        plt.savefig(filename)
+        plt.close()
+    
+    def save_psi_plot(self, psi, observation_loop, landmark_loop):
+        # Create plot
+        plt.matshow(psi, cmap='coolwarm')
+        plt.colorbar()
+        plt.title(f'Psi (Obs: {observation_loop}, LM: {landmark_loop})')
+
+        # Save the plot with observation and landmark loop in filename
+        filename = f"/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/Psi_Plots/psi_obs_{observation_loop}_lm_{landmark_loop}.png"
+        plt.savefig(filename)
+        plt.close()
+    
+    def save_kalman_plot(self, kalman_gain, observation_loop, landmark_loop):
+        # Create plot
+        plt.matshow(kalman_gain, cmap='coolwarm')
+        plt.colorbar()
+        plt.title(f'Kalman gain (Obs: {observation_loop}, LM: {landmark_loop})')
+
+        # Save the plot with observation and landmark loop in filename
+        filename = f"/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/Kalman_Plots/kalman_gain_obs_{observation_loop}_lm_{landmark_loop}.png"
         plt.savefig(filename)
         plt.close()
         
