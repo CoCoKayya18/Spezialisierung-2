@@ -130,9 +130,9 @@ class EKFSLAM:
             tempCovariance = np.zeros((n + 2, n + 2))
             tempCovariance[:n, :n] = self.covariance
             # Initialize landmark uncertainty proportional to the range measurement
-            initial_landmark_uncertainty = (z_i[0] ** 2) / 130
+            # initial_landmark_uncertainty = (z_i[0] ** 2) / 130
 
-            # initial_landmark_uncertainty = 1000
+            initial_landmark_uncertainty = 1000
 
             tempCovariance[n:, n:] = np.array([[initial_landmark_uncertainty, 0],
                                             [0, initial_landmark_uncertainty]])
@@ -228,13 +228,13 @@ class EKFSLAM:
                 
                 temp_num_landmarks -= 1
                 
-                # rospy.loginfo(f"\n MATCHED OBSERVATION {observation_counter} WITH LANDMARK {best_landmark_index} "
-                #               f"at position {new_landmark}, "
-                #               f"Observation Data: {z_i}, "
-                #               f"Predicted Measurement: {best_z_hat}, "
-                #               f"Covariance: {self.covariance}, "
-                #               f"Match Quality: {pi_list.index(j_i)}, "
-                #               f"Total Landmarks: {self.num_landmarks}")
+                rospy.loginfo(f"\n MATCHED OBSERVATION {observation_counter} WITH LANDMARK {best_landmark_index} "
+                              f"at position {new_landmark}, "
+                              f"Observation Data: {z_i}, "
+                              f"Predicted Measurement: {best_z_hat}, "
+                              f"Covariance: {self.covariance}, "
+                              f"Match Quality: {pi_list.index(j_i)}, "
+                              f"Total Landmarks: {self.num_landmarks}")
 
 
             
@@ -292,14 +292,14 @@ class EKFSLAM:
             # rospy.loginfo(f"z_t: {z_t[i]}")
             # rospy.loginfo(f"z_hat: {best_z_hat_list[i]}")
 
-            rospy.loginfo(f"Kalman gain at iteration {i}: {K_t_i}")
-            rospy.loginfo(f"H Matrix at iteration {i}: {best_H_Matrix_list[i]}")
+            # rospy.loginfo(f"Kalman gain at iteration {i}: {K_t_i}")
+            # rospy.loginfo(f"H Matrix at iteration {i}: {best_H_Matrix_list[i]}")
 
             state_update = K_t_i @ measurement_residual
 
             covariance_update = K_t_i @ best_H_Matrix_list[i]
 
-            rospy.loginfo(f"Calculated covariance update at iteration {i}: {covariance_update}")
+            # rospy.loginfo(f"Calculated covariance update at iteration {i}: {covariance_update}")
 
             state_indices = slice(0, K_t_i.shape[0])
 
@@ -312,7 +312,7 @@ class EKFSLAM:
 
         # rospy.loginfo(f"\n UpdateStateSum before update:\n{updateStateSum}")
 
-        rospy.loginfo(f"\n updateCovarianceSum before update:\n{updateCovarianceSum}")
+        # rospy.loginfo(f"\n updateCovarianceSum before update:\n{updateCovarianceSum}")
 
 
         # rospy.loginfo(f"State before update: {self.state}")
@@ -329,10 +329,10 @@ class EKFSLAM:
 
         # rospy.loginfo(f"Identity minus sum: {np.eye(updateCovarianceSum.shape[0]) - updateCovarianceSum}")
 
-        # rospy.loginfo(f"State after update: {self.state}")
-        # rospy.loginfo(f"Covariance after update: {self.covariance}")
+        rospy.loginfo(f"State after update: {self.state}")
+        rospy.loginfo(f"Covariance after update: {self.covariance}")
         
-        self.utils.save_covariance_matrix_plot(self.covariance, observation_counter - 100, landmark_counter - 100)
+        # self.utils.save_covariance_matrix_plot(self.covariance, observation_counter - 100, landmark_counter - 100)
 
         rospy.loginfo("\n === CORRECTION FINISHED ====== CORRECTION FINISHED ======")
 
