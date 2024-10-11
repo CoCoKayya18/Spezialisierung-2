@@ -1,6 +1,7 @@
 
 
 import pandas as pd
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.widgets import CheckButtons
 
@@ -18,10 +19,10 @@ ground_truth_df = pd.read_csv(ground_truth_data_path)
 fig, ax = plt.subplots(figsize=(10, 6))
 
 # Plot EKF path
-ekf_line, = ax.plot(ekf_df['x'], ekf_df['y'], label='EKF Path', color='blue', marker='o', markersize=4, linestyle='-', linewidth=1)
+ekf_line, = ax.plot(ekf_df['x'].values, ekf_df['y'].values, label='EKF Path', color='blue', marker='o', markersize=4, linestyle='-', linewidth=1)
 
 # Plot ground truth path
-ground_truth_line, = ax.plot(ground_truth_df['x'], ground_truth_df['y'], label='Ground Truth Path', color='green', marker='x', markersize=4, linestyle='-', linewidth=1)
+ground_truth_line, = ax.plot(ground_truth_df['x'].values, ground_truth_df['y'].values, label='Ground Truth Path', color='green', marker='x', markersize=4, linestyle='-', linewidth=1)
 
 # Set labels and title
 ax.set_xlabel('X Position')
@@ -53,4 +54,5 @@ check.on_clicked(toggle_visibility)
 plt.subplots_adjust(left=0.1, right=0.8)
 
 # Show the plot
-plt.show()
+# plt.show()
+plt.savefig('/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/path_comparison/path_comparison.png')  # Save the plot as an image file
