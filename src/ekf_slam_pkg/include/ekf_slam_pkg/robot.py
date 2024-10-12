@@ -65,11 +65,11 @@ class Robot:
 
             self.current_vel = self.utils.transform_odometry_to_world(msg)
         
-            # rospy.loginfo(f"\n State Vector:\n{self.state}")
-
-            # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
-
             ekf_predicted_pose, ekf_predicted_covariance = self.ekf_slam.predict(self.current_vel, self.state, self.covariance, self.num_landmarks)  # Run the EKF prediction
+
+            rospy.loginfo(f"\n State Vector after Prediction:\n{self.state}")
+
+            rospy.loginfo(f"\n Covariance Matrix after Prediction:\n{self.covariance}")
             
             self.state = ekf_predicted_pose
             self.covariance = ekf_predicted_covariance
@@ -97,9 +97,9 @@ class Robot:
             self.covariance = ekf_corrected_covariance
             self.num_landmarks = num_landmarks
 
-            # rospy.loginfo(f"\n State Vector:\n{self.state}")
+            rospy.loginfo(f"\n State Vector after Correction:\n{self.state}")
 
-            # rospy.loginfo(f"\n Covariance Matrix:\n{self.covariance}")
+            rospy.loginfo(f"\n Covariance Matrix after Correction:\n{self.covariance}")
         
             self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
             self.ekf_path.append(ekf_corrected_pose)
