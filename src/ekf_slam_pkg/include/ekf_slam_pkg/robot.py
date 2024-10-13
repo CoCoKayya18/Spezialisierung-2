@@ -6,9 +6,11 @@ from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point
 from geometry_msgs.msg import Pose
 from tf.transformations import quaternion_from_euler
+from geometry_msgs.msg import PoseArray
 from math import sqrt
 import threading
 import csv
+import tf
 
 class Robot:
     def __init__(self, config, ekf_slam, utils):
@@ -16,8 +18,12 @@ class Robot:
         self.covariance = np.eye(3)
         self.num_landmarks = 0 
         self.state = np.array([[config['initial_position']['x']], 
-                       [config['initial_position']['y']], 
-                       [config['initial_position']['theta']]])
+                               [config['initial_position']['y']], 
+                               [config['initial_position']['theta']]])
+        
+        self.initialState = np.array([[config['initial_position']['x']], 
+                                      [config['initial_position']['y']], 
+                                      [config['initial_position']['theta']]])
 
         self.ekf_slam = ekf_slam
         self.utils = utils
@@ -33,12 +39,16 @@ class Robot:
         self.GT_path_pub = rospy.Publisher('/Ground_Truth_Path', Marker, queue_size=10)
         self.EKF_path_pub = rospy.Publisher('/EKF_Path', Marker, queue_size=10)
         self.map_pub = rospy.Publisher('/slam_map', Marker, queue_size=10)
+        self.pose_array_pub = rospy.Publisher("/ekf_pose_array", PoseArray, queue_size=10)
         
         self.current_pose = None    
         self.current_vel = np.zeros((3, 1))
         self.ground_truth_path = []
         self.ekf_path = []
         self.filtered_points = []
+        self.predicted_poses_buffer = []
+        
+        self.tf_broadcaster = tf.TransformBroadcaster()
 
         ground_truth_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ground_truth_path.csv'
         ekf_path_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ekf_path.csv'
@@ -53,8 +63,6 @@ class Robot:
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/Kalman_Plots")
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/Psi_Plots")
 
-
-
         # Initialize CSV files with headers
         self.utils.initialize_csv_files(ground_truth_csv_path, ekf_path_csv_path, odom_velocities_csv_path)
         
@@ -67,18 +75,18 @@ class Robot:
         
             ekf_predicted_pose, ekf_predicted_covariance = self.ekf_slam.predict(self.current_vel, self.state, self.covariance, self.num_landmarks)  # Run the EKF prediction
 
-            rospy.loginfo(f"\n State Vector after Prediction:\n{self.state}")
-
-            rospy.loginfo(f"\n Covariance Matrix after Prediction:\n{self.covariance}")
-            
             self.state = ekf_predicted_pose
             self.covariance = ekf_predicted_covariance
             
-            # self.ekf_path.append(ekf_predicted_pose)
+            rospy.loginfo(f"\n State Vector after Prediction:\n{self.state}")
 
+            rospy.loginfo(f"\n Covariance Matrix after Prediction:\n{self.covariance}")
+                
+            # self.ekf_path.append(ekf_predicted_pose)
+        
             # rospy.loginfo(self.ekf_path)
 
-            self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
+            self.publish_EKF_path(self.state, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
 
             # Save odom velocities to CSV
             # self.utils.save_odom_velocities_to_csv(msg)
@@ -97,18 +105,17 @@ class Robot:
             self.covariance = ekf_corrected_covariance
             self.num_landmarks = num_landmarks
 
-            rospy.loginfo(f"\n State Vector after Correction:\n{self.state}")
+            # rospy.loginfo(f"\n State Vector after Correction:\n{self.state}")
 
-            rospy.loginfo(f"\n Covariance Matrix after Correction:\n{self.covariance}")
+            # rospy.loginfo(f"\n Covariance Matrix after Correction:\n{self.covariance}")
+            
+            self.publish_transform()
         
             self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
-            self.ekf_path.append(ekf_corrected_pose)
+            # self.ekf_path.append(self.state)
 
-            # rospy.loginfo(self.ekf_path)
-
-            self.publish_EKF_path(self.ekf_path, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
+            self.publish_EKF_path(self.state, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
             
-
 
     def ground_truth_callback(self, msg):
         self.ground_truth_path.append(msg.pose.pose)
@@ -116,6 +123,23 @@ class Robot:
 
         # Save ground truth path to CSV
         # self.utils.save_ground_truth_path_to_csv(msg.pose.pose)
+    
+    def publish_transform(self):
+        # After each EKF correction, you should call this method
+        # Assuming `self.state` contains [x, y, theta] (position and orientation)
+        x, y, theta = self.state[0], self.state[1], self.state[2]
+
+        # Create a quaternion from yaw (theta)
+        quaternion = tf.transformations.quaternion_from_euler(0, 0, theta)
+
+        # Broadcast the transform from map -> odom
+        self.tf_broadcaster.sendTransform(
+            (x, y, 0),  # Translation (x, y, z)
+            quaternion,  # Rotation as a quaternion
+            rospy.Time.now(),
+            "odom",  # Child frame (the frame that's moving relative to map)
+            "map"    # Parent frame (the static map frame)
+        )
 
     def publish_GT_path(self, path, namespace, color):
         marker = Marker()
@@ -140,7 +164,7 @@ class Robot:
         else:
             rospy.logwarn("No subscribers to the GT path topic or the topic is closed.")
         
-    def publish_EKF_path(self, path, namespace, color, min_distance=0.0005):
+    def publish_EKF_path(self, point, namespace, color, min_distance=0.0005):
         marker = Marker()
         marker.header.frame_id = "map"
         marker.header.stamp = rospy.Time.now()
@@ -162,22 +186,19 @@ class Robot:
             self.filtered_points = []  # Initialize the list only once
 
         # Check and add new points to the filtered points list
-        if len(path) > 0:
-            # Get the last filtered point
-            last_point = self.filtered_points[-1] if self.filtered_points else None
-            
-            for p in path:
+        last_point = self.filtered_points[-1] if self.filtered_points else None
+        
+        # Get the last filtered point
+        last_point = self.filtered_points[-1] if self.filtered_points else None
 
-                x_val = p[0].item() if isinstance(p[0], np.ndarray) else p[0]
-                y_val = p[1].item() if isinstance(p[1], np.ndarray) else p[1]
+        x_val = point[0].item() if isinstance(point[0], np.ndarray) else point[0]
+        y_val = point[1].item() if isinstance(point[1], np.ndarray) else point[1]
 
-                new_point = Point(x_val, y_val, 0)
+        new_point = Point(x_val, y_val, 0)
 
-                if last_point is None or sqrt((new_point.x - last_point.x) ** 2 + (new_point.y - last_point.y) ** 2) > min_distance:
-                    self.filtered_points.append(new_point)
-                    last_point = new_point
-                # else:
-                    # rospy.loginfo(f"Point x: {new_point.x}, y: {new_point.y}, z: {new_point.z} is too close to the last point x: {last_point.x}, y: {last_point.y}, z: {last_point.z}, skipping.")
+        if last_point is None or sqrt((new_point.x - last_point.x) ** 2 + (new_point.y - last_point.y) ** 2) > min_distance:
+            self.filtered_points.append(new_point)
+            last_point = new_point
 
         # Set the filtered points to the marker
         marker.points = self.filtered_points
@@ -207,16 +228,6 @@ class Robot:
         marker.color.b = color[2]
         marker.color.a = 1.0  # Fully opaque
 
-        # Check if landmarks are available
-        # if len(landmarks) > 0:
-        #     # Add only the first landmark as a point
-        #     first_landmark = landmarks[0]
-        #     point = Point()
-        #     point.x = first_landmark[0]  # First landmark X coordinate
-        #     point.y = first_landmark[1]  # First landmark Y coordinate
-        #     point.z = 0                  # Landmarks are in 2D, so Z is 0
-        #     marker.points.append(point)
-
         # Add landmarks as points
         for lm in landmarks:
             point = Point()
@@ -230,4 +241,24 @@ class Robot:
             self.map_pub.publish(marker)
         else:
             rospy.logwarn("No subscribers to the map topic or the topic is closed.")
+
+    def publish_pose_array(self, poses):
+        # Create a PoseArray message
+        pose_array = PoseArray()
+        pose_array.header.stamp = rospy.Time.now()
+        pose_array.header.frame_id = "map"  # Ensure this matches your RViz fixed frame
+
+        for pose in poses:
+            pose_msg = Pose()
+            pose_msg.position.x = pose[0]
+            pose_msg.position.y = pose[1]
+            pose_msg.position.z = 0.0  # Assuming a 2D plane
+
+            # Assuming pose[2] contains orientation (theta)
+            pose_msg.orientation.w = 1.0  # Simplified for 2D pose (no rotation)
+            
+            pose_array.poses.append(pose_msg)
+
+        # Publish the PoseArray
+        self.pose_array_pub.publish(pose_array)
 
