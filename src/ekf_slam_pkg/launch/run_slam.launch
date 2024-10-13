@@ -5,8 +5,8 @@
   <rosparam file="$(find ekf_slam_pkg)/config/ekf_slam_params.yaml" command="load"/>
 
   <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
-  <arg name="x_pos" default="1.0"/>
-  <arg name="y_pos" default="1.0"/>
+  <arg name="x_pos" default="1.25"/>
+  <arg name="y_pos" default="1.25"/>
   <arg name="z_pos" default="0"/>
   <arg name="yaw_pos" default="0"/>
   <arg name="configuration_basename" default="turtlebot3_lds_2d.lua"/>
@@ -19,8 +19,8 @@
 
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <!-- <arg name="world_name" value="$(find turtlebot3_gazebo)/worlds/turtlebot3_world.world"/> -->
-    <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/myWorld.world"/>
-    <!-- <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/mySimpleWorld.world"/> -->
+    <!-- <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/myWorld.world"/> -->
+    <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/mySimpleWorld.world"/>
     <!-- <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/mySimpleWorld_2Feat.world"/> -->
     <arg name="paused" value="false"/>
     <arg name="use_sim_time" value="true"/>
@@ -38,23 +38,34 @@
     <param name="publish_frequency" type="double" value="50.0" />
   </node>
 
-  <node pkg="tf2_ros" type="static_transform_publisher" name="static_transform_publisher" args="0.000 -0.005 0.000 0 0 0 /map /base_link" />
+  <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="static_transform_publisher" args="0.000 -0.005 0.000 0 0 0 /map /base_link" /> -->
+
 
   <!-- <node name="joint_state_publisher_gui" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui" >
     <param name="publish_frequency" type="double" value="30.0"/>
   </node> -->
 
   <!-- Gmapping -->
-  <node pkg="gmapping" type="slam_gmapping" name="turtlebot3_slam_gmapping"> 
+  <!-- <node pkg="gmapping" type="slam_gmapping" name="turtlebot3_slam_gmapping"> 
     <param name="base_frame" value="$(arg set_base_frame)"/>
     <param name="odom_frame" value="$(arg set_odom_frame)"/>
     <param name="map_frame"  value="$(arg set_map_frame)"/>
     <rosparam command="load" file="$(find turtlebot3_slam)/config/gmapping_params.yaml" />
-  </node>
+  </node> -->
+
+
+  <node type="rviz" name="rviz" pkg="rviz" args="-d $(find ekf_slam_pkg)/rviz/rviz_config.rviz"/>
+
+  <!-- <arg name="node_start_delay" default="1.0" /> -->
+
+  <node name="main" pkg="ekf_slam_pkg" type="main.py" output="screen"> </node>
+  <!-- <node name="SendGoal" pkg="ekf_slam_pkg" type="SendGoal.py" output="screen"> </node> -->
+
+</launch>
+
 
   <!-- Move-Base -->
-
-  <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="log">  <!-- output="screen" -->
+  <!-- <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="log"> output="screen"
     <param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS" />
     <rosparam file="$(find turtlebot3_navigation)/param/costmap_common_params_$(arg model).yaml" command="load" ns="global_costmap" />
     <rosparam file="$(find turtlebot3_navigation)/param/costmap_common_params_$(arg model).yaml" command="load" ns="local_costmap" />
@@ -65,13 +76,4 @@
     <remap from="cmd_vel" to="$(arg cmd_vel_topic)"/>
     <remap from="odom" to="$(arg odom_topic)"/>
     <param name="DWAPlannerROS/min_vel_x" value="0.0" if="$(arg move_forward_only)"/>
-  </node>
-
-  <node type="rviz" name="rviz" pkg="rviz" args="-d $(find ekf_slam_pkg)/rviz/rviz_config.rviz"/>
-
-  <!-- <arg name="node_start_delay" default="1.0" /> -->
-
-  <node name="main" pkg="ekf_slam_pkg" type="main.py" output="screen"> </node>
-  <node name="SendGoal" pkg="ekf_slam_pkg" type="SendGoal.py" output="screen"> </node>
-
-</launch>
+  </node> -->

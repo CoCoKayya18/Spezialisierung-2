@@ -236,7 +236,7 @@ class EKFSLAM:
                               f"at position {new_landmark}, "
                               f"Observation Data: {z_i}, "
                               f"Predicted Measurement: {best_z_hat}, "
-                              f"Covariance: {self.covariance}, "
+                            #   f"Covariance: {self.covariance}, "
                               f"Match Quality: {pi_list.index(j_i)}, "
                               f"Total Landmarks: {self.num_landmarks}")
             
@@ -268,7 +268,7 @@ class EKFSLAM:
                 measurement_residual = z_i - best_z_hat
                 
                 state_update = Kalman_gain @ measurement_residual
-                state_update = state_update.reshape((15, 1))
+                state_update = state_update.reshape((state_update.shape[0], 1))
                 
                 # rospy.loginfo(f"State update: {state_update.shape}")
 
