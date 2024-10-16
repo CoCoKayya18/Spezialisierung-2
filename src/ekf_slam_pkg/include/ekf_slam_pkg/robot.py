@@ -69,27 +69,27 @@ class Robot:
     def odom_callback(self, msg):
 
         # self.current_pose = self.state
-        with self.lock:
-
-            self.current_vel = self.utils.transform_odometry_to_world(msg)
+        self.current_vel = self.utils.transform_odometry_to_world(msg)
         
-            ekf_predicted_pose, ekf_predicted_covariance = self.ekf_slam.predict(self.current_vel, self.state, self.covariance, self.num_landmarks)  # Run the EKF prediction
+        # with self.lock:
+        
+        #     ekf_predicted_pose, ekf_predicted_covariance = self.ekf_slam.predict(self.current_vel, self.state, self.covariance, self.num_landmarks)  # Run the EKF prediction
 
-            self.state = ekf_predicted_pose
-            self.covariance = ekf_predicted_covariance
+        #     self.state = ekf_predicted_pose
+        #     self.covariance = ekf_predicted_covariance
             
-            rospy.loginfo(f"\n State Vector after Prediction:\n{self.state}")
+        #     rospy.loginfo(f"\n State Vector after Prediction:\n{self.state}")
 
-            rospy.loginfo(f"\n Covariance Matrix after Prediction:\n{self.covariance}")
+        #     rospy.loginfo(f"\n Covariance Matrix after Prediction:\n{self.covariance}")
                 
-            # self.ekf_path.append(ekf_predicted_pose)
+        #     # self.ekf_path.append(ekf_predicted_pose)
         
-            # rospy.loginfo(self.ekf_path)
+        #     # rospy.loginfo(self.ekf_path)
 
-            self.publish_EKF_path(self.state, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
+        #     self.publish_EKF_path(self.state, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
 
-            # Save odom velocities to CSV
-            # self.utils.save_odom_velocities_to_csv(msg)
+        #     # Save odom velocities to CSV
+        #     # self.utils.save_odom_velocities_to_csv(msg)
 
     def scan_callback(self, msg):
 
@@ -130,11 +130,11 @@ class Robot:
         x, y, theta = self.state[0], self.state[1], self.state[2]
 
         # Create a quaternion from yaw (theta)
-        quaternion = tf.transformations.quaternion_from_euler(0, 0, theta)
+        quaternion = tf.transformations.quaternion_from_euler(0, 0, 0)
 
         # Broadcast the transform from map -> odom
         self.tf_broadcaster.sendTransform(
-            (x, y, 0),  # Translation (x, y, z)
+            (0, 0, 0),  # Translation (x, y, z)
             quaternion,  # Rotation as a quaternion
             rospy.Time.now(),
             "odom",  # Child frame (the frame that's moving relative to map)
@@ -241,24 +241,4 @@ class Robot:
             self.map_pub.publish(marker)
         else:
             rospy.logwarn("No subscribers to the map topic or the topic is closed.")
-
-    def publish_pose_array(self, poses):
-        # Create a PoseArray message
-        pose_array = PoseArray()
-        pose_array.header.stamp = rospy.Time.now()
-        pose_array.header.frame_id = "map"  # Ensure this matches your RViz fixed frame
-
-        for pose in poses:
-            pose_msg = Pose()
-            pose_msg.position.x = pose[0]
-            pose_msg.position.y = pose[1]
-            pose_msg.position.z = 0.0  # Assuming a 2D plane
-
-            # Assuming pose[2] contains orientation (theta)
-            pose_msg.orientation.w = 1.0  # Simplified for 2D pose (no rotation)
-            
-            pose_array.poses.append(pose_msg)
-
-        # Publish the PoseArray
-        self.pose_array_pub.publish(pose_array)
 
