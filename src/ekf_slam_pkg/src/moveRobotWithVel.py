@@ -41,8 +41,8 @@ def move_robot():
 
     # Drive in a square pattern (adjust timings for your robot)
     for _ in range(4):
-        drive_forward(duration=2, speed=0.5)   # Drive forward for 2 seconds
-        rotate_robot(duration=1, angular_speed=0.5)  # Rotate 90 degrees (adjust timing for exact angle)
+        drive_forward(duration=10, speed=0.5)   # Drive forward for 2 seconds
+        # rotate_robot(duration=1, angular_speed=0.5)  # Rotate 90 degrees (adjust timing for exact angle)
 
     # Stop the robot before exiting
     stop_robot()

@@ -156,7 +156,9 @@ class EKFSLAM:
             tempCovariance = np.zeros((n + 2, n + 2))
             tempCovariance[:n, :n] = self.covariance
             # Initialize landmark uncertainty proportional to the range measurement
-            initial_landmark_uncertainty = (z_i[0] ** 2) / 130
+            # initial_landmark_uncertainty = (z_i[0] ** 2) / 130
+            
+            initial_landmark_uncertainty = 1e2
 
             # initial_landmark_uncertainty = 10
 
@@ -222,9 +224,10 @@ class EKFSLAM:
                 
                 landmark = {
                     "landmark_id": landmark_counter,
-                    "z_hat": z_hat_k.tolist(),
-                    "H_matrix": H_k_t.tolist(),
                     "z_i": z_i,
+                    "z_hat": z_hat_k.tolist(),
+                    "measurement_residual": measurement_residual_k.tolist(),
+                    "H_matrix": H_k_t.tolist(),
                     "psi": Psi_k.tolist(),
                     "pi": pi_k
                 }
@@ -256,13 +259,16 @@ class EKFSLAM:
                 # Update the number of landmarks
                 self.num_landmarks = temp_num_landmarks
                 
+                measurement_residual_forJson = z_i - z_hat_list[best_landmark_index]
+                
                 # Add the new landmark to the "newLandmarkData" section
                 new_landmark_data = {
                     "landmark_id": self.num_landmarks,
                     "new_landmark_position": new_landmark.tolist(),
-                    "z_hat": z_hat_list[best_landmark_index].tolist(),
-                    "H_matrix": H_matrix_list[best_landmark_index].tolist(),
                     "z_i": z_i,
+                    "z_hat": z_hat_list[best_landmark_index].tolist(),
+                    "measurement_residual": measurement_residual_forJson.tolist(),
+                    "H_matrix": H_matrix_list[best_landmark_index].tolist(),
                     "psi": psi_list[best_landmark_index].tolist(),
                     "pi": pi_list[best_landmark_index]
                 }
@@ -293,23 +299,6 @@ class EKFSLAM:
                 #               f"Match Quality: {pi_list.index(j_i)}, "
                 #               f"Total Landmarks: {self.num_landmarks}")
                 
-                # Add match details to the "Matched" section
-                matched_observation = {
-                    "observation_id": observation_counter,
-                    "matched_landmark_index": best_landmark_index,
-                    "landmarks": [
-                        {
-                            "landmark_id": best_landmark_index + 1,
-                            "z_hat": best_z_hat.tolist(),
-                            "H_matrix": best_H_matrix.tolist(),
-                            "z_i": z_i,
-                            "psi": psi_list[best_landmark_index].tolist(),
-                            "pi": pi_list[best_landmark_index]
-                        }
-                    ]
-                }
-
-                correction_data["correction"]["Matched"]["observations"].append(matched_observation)
             
                 # Add both variables to the list for later
                 best_H_Matrix_list.append(best_H_matrix)
@@ -325,7 +314,6 @@ class EKFSLAM:
                     
                 # Calculte Kalman gain and att it to the list
                 Kalman_gain = self.covariance @ best_H_matrix.T @ np.linalg.inv(psi_list[best_landmark_index])
-
                 # rospy.loginfo(f"Kalman gain at obs {observation_counter}: {Kalman_gain}")
                 # rospy.loginfo(f"H Matrix at obs {observation_counter}: {best_H_matrix}")
                 # rospy.loginfo(f"Covariance at obs {observation_counter}: {self.covariance}")
@@ -355,6 +343,28 @@ class EKFSLAM:
                     rospy.logwarn(f"Warning: Negative or zero eigenvalues detected in self.covariance before applying final covariance update: {self.covariance}")
                 
                 ' Incremental updating '
+
+                # Add match details to the "Matched" section
+                matched_observation = {
+                    "observation_id": observation_counter,
+                    "matched_landmark_index": best_landmark_index,
+                    "landmarks": [
+                        {
+                            "landmark_id": best_landmark_index + 1,
+                            "z_i": z_i,
+                            "z_hat": best_z_hat.tolist(),
+                            "measurement_residual": measurement_residual.tolist(),
+                            "H_matrix": best_H_matrix.tolist(),
+                            "psi": psi_list[best_landmark_index].tolist(),
+                            "pi": pi_list[best_landmark_index],
+                            "Kalman gain": Kalman_gain.tolist(),
+                            "State update": state_update.tolist(),
+                            "Covariance Update": covariance_update.tolist()
+                        }
+                    ]
+                }
+
+                correction_data["correction"]["Matched"]["observations"].append(matched_observation)
                 
                 
                 # rospy.loginfo(f"Best h_matrix: {best_H_matrix}")

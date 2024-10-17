@@ -17,16 +17,32 @@ def load_json_data(file_path):
 # Function to extract the robot's estimated path and save the plot
 def plot_robot_path(data, save_dir):
     robot_path = []
+    landmarks = []
+    
     for correction in data:
         final_state = correction['correction']['final_state']
         robot_x = final_state[0][0]
         robot_y = final_state[1][0]
         robot_path.append((robot_x, robot_y))
+        
+        if len(final_state) > 3:
+            landmarks_in_state = final_state[3:]  # Landmarks are stored after robot pose
+            for i in range(0, len(landmarks_in_state), 2):
+                landmark_x = landmarks_in_state[i][0]
+                landmark_y = landmarks_in_state[i + 1][0]
+                landmarks.append((landmark_x, landmark_y))
 
     robot_path = np.array(robot_path)
 
     plt.figure(figsize=(10, 6))
     plt.plot(robot_path[:, 0], robot_path[:, 1], marker='o', label='Estimated Path')
+    
+    # Plot the landmarks
+    if landmarks:
+        landmarks = np.array(landmarks)
+        plt.scatter(landmarks[:, 0], landmarks[:, 1], marker='x', color='r', label='Landmarks')
+    
+    
     plt.title('Robot Estimated Path')
     plt.xlabel('X Position')
     plt.ylabel('Y Position')
