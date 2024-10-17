@@ -6,6 +6,7 @@ import sys
 from geometry_msgs.msg import Pose
 from tf.transformations import euler_from_quaternion
 from tf.transformations import quaternion_from_euler
+import json
 
 
 class EKFSLAM:
@@ -110,10 +111,35 @@ class EKFSLAM:
         best_H_Matrix_list = []
         all_pi_list = []
         best_pi_list = []
+        
+        # Initialize the structure to store the correction data
+        correction_data = {
+            "correction": {
+                "number": self.correctionCounter ,
+                "initial_state": self.state.tolist(),
+                "initial_covariance": self.covariance.tolist(),
+                "All": {
+                    "observations": []
+                },
+                "Matched": {
+                    "observations": []
+                },
+                "newLandmarkData": {
+                "landmarks": []
+                },
+                "final_state": None,
+                "final_covariance": None
+            }
+        }
 
         for z_i in z_t:
 
             observation_counter += 1
+            
+            observation = {
+                "observation_id": observation_counter,
+                "landmarks": []
+            }
 
             # rospy.loginfo(f"Observation {observation_counter}")
 
@@ -193,8 +219,22 @@ class EKFSLAM:
                 psi_list.append(Psi_k)
                 pi_list.append(pi_k)
                 z_hat_list.append(z_hat_k)
+                
+                landmark = {
+                    "landmark_id": landmark_counter,
+                    "z_hat": z_hat_k.tolist(),
+                    "H_matrix": H_k_t.tolist(),
+                    "z_i": z_i,
+                    "psi": Psi_k.tolist(),
+                    "pi": pi_k
+                }
+                
+                observation["landmarks"].append(landmark)
             
             # End Landmark Loop
+            
+            # Append the observation to the "All" section
+            correction_data["correction"]["All"]["observations"].append(observation)
 
             # Set the added landmarks pi to the alpha value by hand
             pi_list[-1] = self.alpha
@@ -216,6 +256,19 @@ class EKFSLAM:
                 # Update the number of landmarks
                 self.num_landmarks = temp_num_landmarks
                 
+                # Add the new landmark to the "newLandmarkData" section
+                new_landmark_data = {
+                    "landmark_id": self.num_landmarks,
+                    "new_landmark_position": new_landmark.tolist(),
+                    "z_hat": z_hat_list[best_landmark_index].tolist(),
+                    "H_matrix": H_matrix_list[best_landmark_index].tolist(),
+                    "z_i": z_i,
+                    "psi": psi_list[best_landmark_index].tolist(),
+                    "pi": pi_list[best_landmark_index]
+                }
+                
+                correction_data["correction"]["newLandmarkData"]["landmarks"].append(new_landmark_data)
+                
                 #  If a new Landmark is beeing added, return without correcting the state or covariance
                 # return self.state, self.covariance, self.num_landmarks
 
@@ -232,13 +285,31 @@ class EKFSLAM:
                 
                 temp_num_landmarks -= 1
                 
-                rospy.loginfo(f"\n MATCHED OBSERVATION {observation_counter} WITH LANDMARK {best_landmark_index + 1} "
-                              f"at position {new_landmark}, "
-                              f"Observation Data: {z_i}, "
-                              f"Predicted Measurement: {best_z_hat}, "
-                            #   f"Covariance: {self.covariance}, "
-                              f"Match Quality: {pi_list.index(j_i)}, "
-                              f"Total Landmarks: {self.num_landmarks}")
+                # rospy.loginfo(f"\n MATCHED OBSERVATION {observation_counter} WITH LANDMARK {best_landmark_index + 1} "
+                #               f"at position {new_landmark}, "
+                #               f"Observation Data: {z_i}, "
+                #               f"Predicted Measurement: {best_z_hat}, "
+                #             #   f"Covariance: {self.covariance}, "
+                #               f"Match Quality: {pi_list.index(j_i)}, "
+                #               f"Total Landmarks: {self.num_landmarks}")
+                
+                # Add match details to the "Matched" section
+                matched_observation = {
+                    "observation_id": observation_counter,
+                    "matched_landmark_index": best_landmark_index,
+                    "landmarks": [
+                        {
+                            "landmark_id": best_landmark_index + 1,
+                            "z_hat": best_z_hat.tolist(),
+                            "H_matrix": best_H_matrix.tolist(),
+                            "z_i": z_i,
+                            "psi": psi_list[best_landmark_index].tolist(),
+                            "pi": pi_list[best_landmark_index]
+                        }
+                    ]
+                }
+
+                correction_data["correction"]["Matched"]["observations"].append(matched_observation)
             
                 # Add both variables to the list for later
                 best_H_Matrix_list.append(best_H_matrix)
@@ -365,6 +436,12 @@ class EKFSLAM:
         # self.utils.save_covariance_matrix_plot(self.covariance, observation_counter - 100, landmark_counter - 100)
 
         rospy.loginfo("\n === CORRECTION FINISHED ====== CORRECTION FINISHED ======")
+        
+        correction_data["correction"]["final_state"] = self.state.tolist()
+        correction_data["correction"]["final_covariance"] = self.covariance.tolist()
+        
+        # Save everything to the JSON file
+        self.utils.save_correction_data_to_json(correction_data)
 
         # self.utils.visualize_expected_Observation(z_hat_list, self.correctionCounter)
         self.correctionCounter += 1

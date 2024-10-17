@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import glob
 import os
-
+import json
 class Utils:
     
     def __init__(self):
@@ -18,6 +18,7 @@ class Utils:
         self.ground_truth_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ground_truth_path.csv'
         self.ekf_path_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ekf_path.csv'
         self.odom_velocities_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/odom_velocities.csv'
+        self.correctionJsonPath = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/correctionData.json'
 
     def update_pose_from_state(self, pose, x, y, theta):
         # Helper function to update the robot's pose from state vector
@@ -179,3 +180,21 @@ class Utils:
         filename = f"/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/EstimatedObservations_Plots/Correction_{correctionRun}.png"
         plt.savefig(filename)
         plt.close()
+    
+    def save_correction_data_to_json(self, correction_data):
+        
+        # Check if file exists, if not, create it and initialize it with an empty list
+        if not os.path.exists(self.correctionJsonPath) or os.stat(self.correctionJsonPath).st_size == 0:
+            with open(self.correctionJsonPath, 'w') as json_file:
+                json.dump([], json_file)  # Initialize with an empty list
+
+        # Read the current contents of the file
+        with open(self.correctionJsonPath, 'r') as json_file:
+            existing_data = json.load(json_file)
+
+        # Append the new correction data
+        existing_data.append(correction_data)
+
+        # Write the updated data back to the file
+        with open(self.correctionJsonPath, 'w') as json_file:
+            json.dump(existing_data, json_file, indent=4)
