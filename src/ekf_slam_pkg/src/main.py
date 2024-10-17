@@ -3,12 +3,22 @@
 import os
 import sys
 import rospy
+import subprocess
 from ekf_slam_pkg import EKFSLAM, Sensor, Map, Robot, Utils
 import time  # Import the time module for frequency checking
+
+def run_analysis_script():
+    """Run the analysis script when ROS shuts down."""
+    script_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/Debugging Scripts/correctionAnalysis.py'
+    
+    # Run the script using subprocess (this avoids blocking)
+    subprocess.Popen(['python3', script_path])
 
 def main():
 
     rospy.init_node('ekf_slam_launcher', anonymous=True)
+    
+    rospy.on_shutdown(run_analysis_script)
 
     # Initialize components
     config = {
