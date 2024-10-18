@@ -18,7 +18,7 @@ class Sensor:
             ranges = np.array(scan_data.ranges)
 
             # Convert polar coordinates (range and angle) to Cartesian coordinates (x, y)
-            angles = angles = angle_min + np.arange(len(ranges)) * angle_increment
+            angles = angle_min + np.arange(len(ranges)) * angle_increment
 
             x_coords = ranges * np.cos(angles)
 

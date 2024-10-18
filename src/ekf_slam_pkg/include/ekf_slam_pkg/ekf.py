@@ -100,6 +100,9 @@ class EKFSLAM:
         # Feature Extraction Step
         z_t = self.sensor.extract_features_from_scan(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment)
         
+        # for i, z in enumerate(z_t):
+        #     z_t[i][1] = self.utils.normalize_angle(z_t[i][1])
+        
         # z_t = self.utils.laser_scan_to_polar_tuples(scanMessage)
 
         # Start observation loop
@@ -140,6 +143,11 @@ class EKFSLAM:
                 "observation_id": observation_counter,
                 "landmarks": []
             }
+            
+            # Normalize z_i
+            z_i = list(z_i)  # Convert the tuple to a list
+            z_i[1] = self.utils.normalize_angle(z_i[1])  # Modify the angle
+            z_i = tuple(z_i)  # Convert it back to a tuple if necessary
 
             # rospy.loginfo(f"Observation {observation_counter}")
 
@@ -186,16 +194,11 @@ class EKFSLAM:
                 
                 z_hat_k = np.array([np.sqrt(q_k), np.arctan2(delta_k[1].item(), delta_k[0].item()) - theta])
                 
-                'The calculation of delta and q_k seem fine, as the z_hat_k is very close to the correct z_i'
-                # rospy.loginfo(f"Observed measurement at obs {observation_counter}: {z_i}")
-                # rospy.loginfo(f"Predicted Measurement at LM {landmark_counter}: {z_hat_k}")
-
+                z_hat_k[1] = self.utils.normalize_angle(z_hat_k[1])
+                
                 # Compute F_x,k matrix
                 F_x_k = self.map.compute_F_x_k(temp_num_landmarks, k)
                 
-                ' F matrix structure seems to be correct'
-                # rospy.loginfo(f"F matrix at obs {observation_counter} and lm {landmark_counter}: {F_x_k}")
-
                 # Compute H^k_t matrix
                 H_k_t = self.map.compute_H_k_t(delta_k, q_k, F_x_k)
             
