@@ -82,10 +82,6 @@ class Robot:
             rospy.loginfo(f"\n State Vector after Prediction:\n{self.state}")
 
             rospy.loginfo(f"\n Covariance Matrix after Prediction:\n{self.covariance}")
-                
-            # self.ekf_path.append(ekf_predicted_pose)
-        
-            # rospy.loginfo(self.ekf_path)
 
             self.publish_EKF_path(self.state, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
 
@@ -97,8 +93,6 @@ class Robot:
         self.scan_message = msg
 
         with self.lock:
-
-            # rospy.loginfo(f"\n State Vector before correction:\n{self.state}")
         
             ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
 
@@ -106,14 +100,9 @@ class Robot:
             self.covariance = ekf_corrected_covariance
             self.num_landmarks = num_landmarks
 
-            # rospy.loginfo(f"\n State Vector after Correction:\n{self.state}")
-
-            # rospy.loginfo(f"\n Covariance Matrix after Correction:\n{self.covariance}")
-            
             self.publish_transform()
         
             self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
-            # self.ekf_path.append(self.state)
 
             self.publish_EKF_path(self.state, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
             
@@ -126,8 +115,7 @@ class Robot:
         # self.utils.save_ground_truth_path_to_csv(msg.pose.pose)
     
     def publish_transform(self):
-        # After each EKF correction, you should call this method
-        # Assuming `self.state` contains [x, y, theta] (position and orientation)
+
         x, y, theta = self.state[0], self.state[1], self.state[2]
 
         # Create a quaternion from yaw (theta)

@@ -334,6 +334,63 @@ def plot_covariance_growth_log_scale(data, save_dir):
     plt.savefig(os.path.join(save_dir, 'variance_growth_log_scale.png'))
     plt.close()
 
+def plot_state_after_corrections(data, save_dir):
+    correction_steps = []
+    x_state = []
+    y_state = []
+    theta_state = []
+    landmark_1_x_state = []
+    landmark_1_y_state = []
+
+    for correction in data:
+        correction_number = correction['correction']['number']
+        
+        # Check if there is matched data in this correction
+        matched_observations = correction['correction'].get('Matched', {}).get('observations', [])
+        
+        if matched_observations:
+            final_state = correction['correction']['final_state']
+            correction_steps.append(correction_number)
+            # Append robot state (x, y, theta)
+            x_state.append(final_state[0][0])  # x
+            y_state.append(final_state[1][0])  # y
+            theta_state.append(final_state[2][0])  # theta
+            
+            # Append the first landmark state (x, y) if it exists
+            if len(final_state) > 3:
+                landmark_1_x_state.append(final_state[3][0])  # landmark_1_x
+                landmark_1_y_state.append(final_state[4][0])  # landmark_1_y
+            else:
+                # In case there's no landmark information
+                landmark_1_x_state.append(np.nan)  # No landmark, append NaN
+                landmark_1_y_state.append(np.nan)  # No landmark, append NaN
+
+    # Plotting each state variable
+    plt.figure(figsize=(10, 6))
+    
+    plt.plot(correction_steps, x_state, label='x (robot)', marker='o')
+    plt.plot(correction_steps, y_state, label='y (robot)', marker='o')
+    plt.plot(correction_steps, theta_state, label='theta (robot)', marker='o')
+    plt.plot(correction_steps, landmark_1_x_state, label='Landmark 1 x', marker='x')
+    plt.plot(correction_steps, landmark_1_y_state, label='Landmark 1 y', marker='x')
+    
+    # Adding the linear line: y = m * (x - 10) + 0, where m is the slope
+    m = 0.1  # Define the slope, you can change this value to adjust the slope
+    x_line = np.array(correction_steps)
+    y_line = m * (x_line - 12)  # Linear equation with intercept at (10, 0)
+
+    plt.plot(x_line, y_line, label='Linear Line (y = m(x-10))', linestyle='--', color='black')
+
+    plt.title('State After Each Correction (Matched Observations)')
+    plt.xlabel('Correction Step')
+    plt.ylabel('State Value')
+    plt.grid(True)
+    plt.legend()
+
+    # Save the plot
+    plt.savefig(os.path.join(save_dir, 'state_after_each_correction.png'))
+    plt.close()
+
 
 # Main function to run all analysis
 def analyze_ekf_slam(file_path, output_dir):
@@ -363,6 +420,8 @@ def analyze_ekf_slam(file_path, output_dir):
     
     # Analyze and plot state updates
     plot_state_updates_per_correction(data, output_dir)
+    
+    plot_state_after_corrections(data, output_dir)
 
     print(f'Analysis complete. Plots saved in {output_dir}')
 
