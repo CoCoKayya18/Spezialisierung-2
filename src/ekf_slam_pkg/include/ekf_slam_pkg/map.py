@@ -13,24 +13,8 @@ class Map:
 
         r_i, phi_i = z_i
 
-        # r_i = z_i[0]  
-        # phi_i = z_i[1]
-
-        # rospy.loginfo(f"Z_i: {z_i}")
-        # rospy.loginfo(f"r_i: {r_i}")
-        # rospy.loginfo(f"phi_i: {phi_i}")
-
-        # rospy.loginfo(f"X robot: {x}")
-        # rospy.loginfo(f"Y robot: {y}")
-        # rospy.loginfo(f"Theta robot: {theta}")
-
-        # rospy.loginfo(f"Angle before: {phi_i + theta} and after normalization: {np.arctan2(np.sin(phi_i + theta), np.cos(phi_i + theta))}")
-
         mu_N_plus_1_x = x + r_i * np.cos(np.arctan2(np.sin(phi_i + theta), np.cos(phi_i + theta)))
         mu_N_plus_1_y = y + r_i * np.sin(np.arctan2(np.sin(phi_i + theta), np.cos(phi_i + theta)))
-
-        # rospy.loginfo(f"mu_N_plus_1_x robot: {mu_N_plus_1_x}")
-        # rospy.loginfo(f"mu_N_plus_1_y robot: {mu_N_plus_1_y}")
 
         return mu_N_plus_1_x, mu_N_plus_1_y
 
