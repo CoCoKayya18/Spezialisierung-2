@@ -1,17 +1,21 @@
 import rospy
 import numpy as np
+from math import atan2, sqrt
 from sklearn.cluster import DBSCAN
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import os
+from sklearn.linear_model import RANSACRegressor
 
 class Sensor:
     def __init__(self, config):
         rospy.loginfo("Sensor class initialized")
         self.plot_counter = 1
-        # self.first_call = True
+        self.first_call = True
         pass
 
-    def extract_features_from_scan(self, scan_data, angle_min, angle_max, angle_increment, eps=0.2, min_samples=5):
+    def extract_features_from_scan(self, scan_data, angle_min, angle_max, angle_increment, eps=0.15, min_samples=5):
             # Extracts features from LiDAR scan data using DBSCAN clustering
 
             # Extract ranges from the LaserScan message
@@ -58,7 +62,7 @@ class Sensor:
                 # Append the polar coordinates (r, phi) to the features list
                 features.append((r, phi))
             
-            # self.visualize_features(valid_points, labels, features)
+            self.visualize_features(valid_points, labels, features)
 
             # print(f"\n Following features detected: {features}")
             
@@ -71,20 +75,20 @@ class Sensor:
         save_dir = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/DBSCAN_Plots'
 
         # Check if this is the first call
-        # if self.first_call:
-        #     # Remove all existing plots in the directory
-        #     if os.path.exists(save_dir):
-        #         for file_name in os.listdir(save_dir):
-        #             file_path = os.path.join(save_dir, file_name)
-        #             try:
-        #                 if os.path.isfile(file_path):
-        #                     os.remove(file_path)
-        #                     rospy.loginfo(f"Deleted existing plot: {file_path}")
-        #             except Exception as e:
-        #                 rospy.logerr(f"Error deleting file {file_path}: {e}")
-        #     else:
-        #         os.makedirs(save_dir)  # Create the directory if it doesn't exist
-        #     self.first_call = False  # Set the flag to False after the first call
+        if self.first_call:
+            # Remove all existing plots in the directory
+            if os.path.exists(save_dir):
+                for file_name in os.listdir(save_dir):
+                    file_path = os.path.join(save_dir, file_name)
+                    try:
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                            rospy.loginfo(f"Deleted existing plot: {file_path}")
+                    except Exception as e:
+                        rospy.logerr(f"Error deleting file {file_path}: {e}")
+            else:
+                os.makedirs(save_dir)  # Create the directory if it doesn't exist
+            self.first_call = False  # Set the flag to False after the first call
 
         # Plot the LiDAR scan points
         plt.figure(figsize=(10, 10))
@@ -110,3 +114,235 @@ class Sensor:
 
         # Increment the plot counter
         self.plot_counter += 1
+
+        if len(corners) == 0:
+            return corners
+        
+        filtered_corners = [corners[0]]
+        
+        for corner in corners[1:]:
+            if all(np.linalg.norm(np.array(corner) - np.array(fc)) > min_distance for fc in filtered_corners):
+                filtered_corners.append(corner)
+        
+        return filtered_corners
+
+    def detect_corners_and_circles_ransac(self, lidar_data, angle_min, angle_max, angle_increment, counter, distance_threshold=0.75, angle_threshold=np.pi / 3):
+        lidar_data = np.array(lidar_data)
+        valid_ranges = np.isfinite(lidar_data) & (lidar_data > 0)
+        lidar_data = lidar_data[valid_ranges]
+
+        num_points = len(lidar_data)
+
+        # Calculate angles for each point in the scan
+        angles = angle_min + np.arange(num_points) * angle_increment
+
+        # Convert polar coordinates (range, angle) to Cartesian coordinates (x, y)
+        x_coords = lidar_data * np.cos(angles)
+        y_coords = lidar_data * np.sin(angles)
+
+        points = np.vstack((x_coords, y_coords)).T
+
+        # Detect lines using RANSAC
+        lines = self.detect_lines_ransac(points)
+        
+        # Detect line intersections (corners)
+        corners = self.detect_line_intersections(lines)
+
+        # Detect circles using RANSAC
+        # best_circle, circle_inliers = self.detect_circles_ransac(points)
+        
+        best_circle = None
+
+        # Convert corner points to polar coordinates
+        corner_polar_coords = [self.cartesian_to_polar(x, y) for (x, y) in corners]
+
+        # Convert circle midpoint to polar coordinates (if a circle was detected)
+        if best_circle is not None:
+            circle_center = (best_circle[0], best_circle[1])
+            circle_polar_coords = [list(self.cartesian_to_polar(circle_center[0], circle_center[1]))]
+        else:
+            circle_polar_coords = []
+
+        # Visualize the results
+        self.visualize_lidar_data(points, corners, [best_circle], lines, counter, base_name="lidar_extraction")
+        
+        rospy.loginfo(type(circle_polar_coords))
+        
+        features = corner_polar_coords + circle_polar_coords
+        
+        rospy.loginfo(f"Features: {features}")
+
+        return features
+
+    def detect_lines_ransac(self, points, residual_threshold=0.2, min_samples=2, max_trials=1000, stop_probability=0.99, min_inliers=2):
+        lines = []
+        remaining_points = points.copy()
+
+        while len(remaining_points) > min_inliers:
+            # Fit a line using RANSAC
+            x_coords = remaining_points[:, 0].reshape(-1, 1)  # reshape for sklearn
+            y_coords = remaining_points[:, 1]
+
+            ransac = RANSACRegressor(min_samples=min_samples, residual_threshold=residual_threshold, max_trials=max_trials, stop_probability=stop_probability)
+            ransac.fit(x_coords, y_coords)
+
+            # Get inliers
+            inlier_mask = ransac.inlier_mask_
+            outlier_mask = np.logical_not(inlier_mask)
+
+            # Check if we have enough inliers
+            if np.sum(inlier_mask) < min_inliers:
+                break
+
+            # Get slope and intercept of the detected line
+            slope = ransac.estimator_.coef_[0]
+            intercept = ransac.estimator_.intercept_
+
+            # Store the detected line
+            lines.append((slope, intercept))
+
+            # Remove inliers from the point set to detect more lines
+            remaining_points = remaining_points[outlier_mask]
+
+        return lines
+
+    def detect_line_intersections(self, lines):
+        intersections = []
+        for i in range(len(lines)):
+            for j in range(i + 1, len(lines)):
+                slope1, intercept1 = lines[i]
+                slope2, intercept2 = lines[j]
+
+                # Check if lines are parallel
+                if slope1 == slope2:
+                    continue  # Parallel lines do not intersect
+
+                # Calculate the intersection point (x, y)
+                x_intersection = (intercept2 - intercept1) / (slope1 - slope2)
+                y_intersection = slope1 * x_intersection + intercept1
+                intersections.append((x_intersection, y_intersection))
+
+        return intersections
+
+    def detect_circles_ransac(self, points, max_error=0.05, min_samples=3):
+        
+        best_circle = None
+        best_inliers = None
+        best_error = float('inf')
+
+        # Try fitting circles with RANSAC
+        for _ in range(1000):  # RANSAC iterations
+            
+            if len(points) < min_samples:
+                return None, None
+            
+            sample_indices = np.random.choice(len(points), min_samples, replace=False)
+            sample_points = points[sample_indices]
+
+            xs = sample_points[:, 0]
+            ys = sample_points[:, 1]
+
+            # Fit a circle to the sample points
+            xc, yc, radius, error = self.fit_circle(xs, ys)
+
+            if error < best_error and error < max_error:
+                inliers = np.where(np.abs(np.sqrt((points[:, 0] - xc) ** 2 + (points[:, 1] - yc) ** 2) - radius) < max_error)[0]
+                if len(inliers) > min_samples:
+                    best_circle = (xc, yc, radius)
+                    best_inliers = inliers
+                    best_error = error
+
+        return best_circle, best_inliers if best_circle is not None else (None, None)
+    
+    def fit_circle(self, xs, ys):
+        if len(xs) < 3 or len(ys) < 3:
+            rospy.logwarn("Not enough points for circle fitting.")
+            return None, None, None, np.inf
+
+        # Stack the xs and ys arrays into a 2D array where each row is [x, y]
+        X = np.vstack([xs, ys]).T  # Combine xs and ys into 2D array
+        
+        A = np.vstack([X[:, 0], X[:, 1], np.ones(len(X))]).T
+        B = X[:, 0]**2 + X[:, 1]**2
+        sol = np.linalg.lstsq(A, B, rcond=None)[0]
+        xc = sol[0] / 2
+        yc = sol[1] / 2
+        radius = np.sqrt((sol[2] + xc**2 + yc**2))
+
+        # Compute the fitting error (distance of points from the circle)
+        error = np.mean(np.abs(np.sqrt((X[:, 0] - xc)**2 + (X[:, 1] - yc)**2) - radius))
+        
+        return xc, yc, radius, error
+    
+    def cartesian_to_polar(self, x, y):
+        r = sqrt(x**2 + y**2)
+        phi = atan2(y, x)
+        return (r, phi)
+
+    def filter_close_corners(self, corners, min_distance=0.05):
+        if len(corners) == 0:
+            return corners
+
+        filtered_corners = [corners[0]]
+
+        for corner in corners[1:]:
+            if all(np.linalg.norm(np.array(corner) - np.array(fc)) > min_distance for fc in filtered_corners):
+                filtered_corners.append(corner)
+
+        return filtered_corners
+
+    def visualize_lidar_data(self, points, corners, circles, lines, counter, save_folder = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/FeatureExtraction', base_name="extraction_step"):
+        # Check if this is the first call and clear the folder
+        if self.first_call:
+            # Remove all existing plots in the directory
+            if os.path.exists(save_folder):
+                for file_name in os.listdir(save_folder):
+                    file_path = os.path.join(save_folder, file_name)
+                    try:
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                            rospy.loginfo(f"Deleted existing plot: {file_path}")
+                    except Exception as e:
+                        rospy.logerr(f"Error deleting file {file_path}: {e}")
+            else:
+                os.makedirs(save_folder)  # Create the directory if it doesn't exist
+            self.first_call = False  # Set the flag to False after the first call
+
+        plt.figure(figsize=(10, 10))
+        
+        # Plot the LiDAR scan points
+        plt.scatter(points[:, 0], points[:, 1], c='gray', s=10, label="LiDAR Points")
+
+        # Highlight detected corners
+        if corners:
+            corners = np.array(corners)
+            plt.scatter(corners[:, 0], corners[:, 1], c='red', s=100, marker='x', label="Corners")
+        
+        # Highlight detected circle centers
+        if circles and circles[0] is not None:
+            circles = np.array(circles)
+            plt.scatter(circles[:, 0], circles[:, 1], c='blue', s=100, marker='o', label="Circle Centers")
+
+        # Plot the detected RANSAC lines
+        for slope, intercept in lines:
+            x_vals = np.array([min(points[:, 0]), max(points[:, 0])])
+            y_vals = slope * x_vals + intercept
+            plt.plot(x_vals, y_vals, label=f"Line: y={slope:.2f}x+{intercept:.2f}")
+
+        # Set plot details
+        plt.title("LiDAR Data with Detected Corners, Circles, and Lines")
+        plt.xlabel("X [meters]")
+        plt.ylabel("Y [meters]")
+        plt.legend()
+        plt.grid(True)
+        plt.axis("equal")
+
+        # Generate filename and save plot
+        filename = f"{base_name}_{counter}.png"
+        filepath = os.path.join(save_folder, filename)
+        plt.savefig(filepath)
+        plt.close()
+
+        print(f"Saved visualization: {filepath}")
+
+        

@@ -24,6 +24,8 @@ class EKFSLAM:
 
         self.F_x = np.eye(3)
         
+        self.oldSignature = np.eye(2)
+        
         self.process_noise = np.array([[np.power(config['process_noise'],2),0,0],[0, np.power(config['process_noise'],2),0], [0, 0, np.power(config['process_noise'],2)]]) 
         self.measurement_noise = np.array([[np.power(config['measurement_noise'],2),0],[0, np.power(config['measurement_noise'],2)]])
 
@@ -96,9 +98,13 @@ class EKFSLAM:
         x = self.state[0].item()
         y = self.state[1].item()
         theta = self.state[2].item()
+        
+        rospy.loginfo(f"Scan message in correction: {scanMessage.ranges}")
 
         # Feature Extraction Step
-        z_t = self.sensor.extract_features_from_scan(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment)
+        # z_t = self.sensor.extract_features_from_scan(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment)
+
+        z_t = self.sensor.detect_corners_and_circles_ransac(scanMessage.ranges, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment, self.correctionCounter)
 
         # Start observation loop
 
@@ -144,10 +150,23 @@ class EKFSLAM:
             z_i[1] = self.utils.normalize_angle(z_i[1])  # Modify the angle
             z_i = tuple(z_i)  # Convert it back to a tuple if necessary
 
+            # Dönges Input bombe
+            # old_sig = nparray([oldx, oldy]) theoretical signature for tolerance treshhold 
+            # if oldSig < 10% x,y: 
+            #   keep oold -> newlandmark = oldSig[0], oldSig[1]
+            # else:
+            #   newLandmark = newLandmark
+            
+            # newLandmark_x, newLandmark_y, self.oldSignature = self.map.update_landmarks(x, y, theta, z_i, self.oldSignature)
+            # new_landmark = np.array([newLandmark_x, newLandmark_y])
+            
+            # rospy.loginfo(f"New landmark: {new_landmark}")
+            # rospy.loginfo(f"Old signature {self.oldSignature}")
+                        
             # initialize new landmark and create tempoprary state and covariance matrices
             newLandmark_x, newLandmark_y = self.map.calculate_landmark_estimates(x, y, theta, z_i)
             new_landmark = np.array([newLandmark_x, newLandmark_y])
-
+            
             # Create temporary state and covariance matrix with the landmark in it
 
             tempState = np.vstack((self.state, new_landmark.reshape(2, 1)))

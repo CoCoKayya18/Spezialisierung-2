@@ -391,6 +391,41 @@ def plot_state_after_corrections(data, save_dir):
     plt.savefig(os.path.join(save_dir, 'state_after_each_correction.png'))
     plt.close()
 
+def plot_pi_values(data, save_dir):
+    # List to hold pi values for all observations
+    pi_values = []
+    observation_ids = []
+    
+    # Iterate through the corrections in the data
+    for correction in data:
+        observations = correction['correction']['All']['observations']
+        
+        for obs in observations:
+            for landmark in obs['landmarks']:
+                pi_value = landmark['pi']
+                pi_values.append(pi_value)
+                observation_ids.append(obs['observation_id'])
+    
+    # Convert to numpy arrays for plotting
+    pi_values = np.array(pi_values)
+    observation_ids = np.array(observation_ids)
+
+    # Plot pi values
+    plt.figure(figsize=(10, 6))
+    plt.plot(observation_ids, pi_values, marker='o', label='Pi Values')
+    plt.title('Pi Values for All Observations')
+    plt.xlabel('Observation ID')
+    plt.ylabel('Pi Value')
+    plt.grid(True)
+    plt.legend()
+
+    # Save the plot
+    plt.savefig(os.path.join(save_dir, 'pi_values.png'))
+    plt.close()
+
+    print(f"Pi values plot saved in {save_dir}")
+
+
 
 # Main function to run all analysis
 def analyze_ekf_slam(file_path, output_dir):
@@ -422,6 +457,8 @@ def analyze_ekf_slam(file_path, output_dir):
     plot_state_updates_per_correction(data, output_dir)
     
     plot_state_after_corrections(data, output_dir)
+    
+    plot_pi_values(data, output_dir)
 
     print(f'Analysis complete. Plots saved in {output_dir}')
 

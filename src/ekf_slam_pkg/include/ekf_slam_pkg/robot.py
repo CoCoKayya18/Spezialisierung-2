@@ -89,8 +89,17 @@ class Robot:
             # self.utils.save_odom_velocities_to_csv(msg)
 
     def scan_callback(self, msg):
+        
+        # translation = (-0.032, 0.0, 0.172)  
+        # rotation_quaternion = (0.0, 0.0, 0.0, 1.0)
 
-        self.scan_message = msg
+        transformed_scan = self.utils.transform_scan_to_map(msg)
+
+        rospy.loginfo(f"Before Transformation: {msg.ranges}")
+
+        self.scan_message = transformed_scan
+        
+        rospy.loginfo(f"After Transformation: {self.scan_message.ranges}")
 
         with self.lock:
         
@@ -119,16 +128,38 @@ class Robot:
         x, y, theta = self.state[0], self.state[1], self.state[2]
 
         # Create a quaternion from yaw (theta)
-        quaternion = tf.transformations.quaternion_from_euler(0, 0, 0)
+        # quaternion = tf.transformations.quaternion_from_euler(0, 0, 0)
+        quaternion = tf.transformations.quaternion_from_euler(0, 0, theta)
 
+        self.tf_broadcaster.sendTransform(
+            (0, 0, 0),         # No translation
+            tf.transformations.quaternion_from_euler(0, 0, 0),  # No rotation
+            rospy.Time.now(),   # Current time
+            "odom",        # Child frame
+            "map"              # Parent frame
+        )
+        
+        # Additionally, broadcast a static transform from odom -> base_link (for completeness)
+        self.tf_broadcaster.sendTransform(
+            (0, 0, 0),         # No translation
+            tf.transformations.quaternion_from_euler(0, 0, 0),  # No rotation
+            rospy.Time.now(),   # Current time
+            "base_link",        # Child frame
+            "odom"              # Parent frame
+        )
+        
         # Broadcast the transform from map -> odom
         self.tf_broadcaster.sendTransform(
-            (0, 0, 0),  # Translation (x, y, z)
+            # (0, 0, 0),  # Translation (x, y, z)
+            (x, y, 0),
             quaternion,  # Rotation as a quaternion
             rospy.Time.now(),
-            "odom",  # Child frame (the frame that's moving relative to map)
+            # "odom",  # Child frame (the frame that's moving relative to map)
+            "base_link",
             "map"    # Parent frame (the static map frame)
         )
+        
+        
 
     def publish_GT_path(self, path, namespace, color):
         marker = Marker()
