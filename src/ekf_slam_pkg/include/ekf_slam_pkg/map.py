@@ -8,6 +8,11 @@ class Map:
 
         self.alpha = 5.991 # 95% confidence based on Chi-squared distribution
         rospy.loginfo("Map class initialized")
+        
+    # Add a new method for calculating signature
+    def calculate_landmark_signature(self, x, y):
+        # Here you can define what the signature is, for now it's simply the (x, y) coordinates
+        return np.array([x, y])
 
     def calculate_landmark_estimates(self, x, y, theta, z_i):
 
@@ -15,8 +20,37 @@ class Map:
 
         mu_N_plus_1_x = x + r_i * np.cos(np.arctan2(np.sin(phi_i + theta), np.cos(phi_i + theta)))
         mu_N_plus_1_y = y + r_i * np.sin(np.arctan2(np.sin(phi_i + theta), np.cos(phi_i + theta)))
-
+        
         return mu_N_plus_1_x, mu_N_plus_1_y
+
+    def calculate_landmark_estimates_with_sig(self, x, y, theta, z_i):
+
+        r_i, phi_i = z_i
+
+        mu_N_plus_1_x = x + r_i * np.cos(np.arctan2(np.sin(phi_i + theta), np.cos(phi_i + theta)))
+        mu_N_plus_1_y = y + r_i * np.sin(np.arctan2(np.sin(phi_i + theta), np.cos(phi_i + theta)))
+        
+        # Create the landmark signature
+        signature = self.calculate_landmark_signature(mu_N_plus_1_x, mu_N_plus_1_y)
+
+        return mu_N_plus_1_x, mu_N_plus_1_y, signature
+    
+    def update_landmarks(self, x, y, theta, z_i, old_signature):
+        # Get new landmark estimate and signature
+        new_landmark_x, new_landmark_y, new_signature = self.calculate_landcalculate_landmark_estimates_with_sigmark_estimates(x, y, theta, z_i)
+        
+        # Check if the new signature deviates much from the old one
+        deviation = np.linalg.norm(new_signature - old_signature)  # Calculate Euclidean distance between signatures
+        
+        if deviation < 1:  # Assuming 10% tolerance (can be changed based on your application)
+            # Landmark does not deviate much, keep the old landmark
+            new_landmark_x, new_landmark_y = old_signature  # Use the old signature's landmark position
+            return new_landmark_x, new_landmark_y, old_signature
+        
+        else:
+            # Landmark deviates too much, update to the new one
+            new_landmark_x, new_landmark_y = new_signature
+            return new_landmark_x, new_landmark_y, new_signature
 
     def compute_F_x_k(self, num_landmarks, k):
     

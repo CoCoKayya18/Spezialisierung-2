@@ -4,11 +4,15 @@ import csv
 from nav_msgs.msg import Odometry
 from tf.transformations import euler_from_quaternion
 from tf.transformations import quaternion_from_euler
+from sensor_msgs.msg import LaserScan
+from geometry_msgs.msg import PointStamped
 import matplotlib.pyplot as plt
 import numpy as np
 import glob
 import os
 import json
+import tf 
+
 class Utils:
     
     def __init__(self):
@@ -19,6 +23,8 @@ class Utils:
         self.ekf_path_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ekf_path.csv'
         self.odom_velocities_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/odom_velocities.csv'
         self.correctionJsonPath = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/correctionData.json'
+
+        self.listener = tf.TransformListener()
 
     def update_pose_from_state(self, pose, x, y, theta):
         # Helper function to update the robot's pose from state vector
@@ -57,6 +63,55 @@ class Utils:
         transformed_velocities = np.array([[v_x_world, v_y_world, angular_z]])
 
         return transformed_velocities
+    
+    def transform_scan_to_map(self, scan_msg):
+        
+        transformed_scan = LaserScan()
+        transformed_scan.header.frame_id = "map"  # Set new frame_id for map
+        transformed_scan.header.stamp = scan_msg.header.stamp
+        transformed_scan.angle_min = scan_msg.angle_min
+        transformed_scan.angle_max = scan_msg.angle_max
+        transformed_scan.angle_increment = scan_msg.angle_increment
+        transformed_scan.time_increment = scan_msg.time_increment
+        transformed_scan.scan_time = scan_msg.scan_time
+        transformed_scan.range_min = scan_msg.range_min
+        transformed_scan.range_max = scan_msg.range_max
+        transformed_scan.ranges = []
+
+        try:
+            # Get the transformation from base_scan to map
+            self.listener.waitForTransform("map", scan_msg.header.frame_id, rospy.Time(0), rospy.Duration(4.0))
+
+            # Transform each laser scan point to the map frame
+            angle = scan_msg.angle_min
+            for r in scan_msg.ranges:
+                if r < scan_msg.range_min or r > scan_msg.range_max:
+                    transformed_scan.ranges.append(float('inf'))
+                    angle += scan_msg.angle_increment
+                    continue
+
+                # Convert polar coordinates (range, angle) to Cartesian (x, y) in base_scan frame
+                point = PointStamped()
+                point.header.frame_id = scan_msg.header.frame_id
+                point.point.x = r * np.cos(angle)
+                point.point.y = r * np.sin(angle)
+                point.point.z = 0
+
+                # Transform the point to the map frame
+                point_in_map = self.listener.transformPoint("map", point)
+
+                # Convert back to polar coordinates (range) in the map frame
+                transformed_range = np.sqrt(point_in_map.point.x ** 2 + point_in_map.point.y ** 2)
+                transformed_scan.ranges.append(transformed_range)
+
+                # Increment the angle for the next scan point
+                angle += scan_msg.angle_increment
+
+            return transformed_scan
+
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            rospy.logwarn("Transform lookup failed. Returning untransformed scan data.")
+            return scan_msg
     
     def initialize_csv_files(self, ground_truth_csv_path, ekf_path_csv_path, odom_velocities_csv_path):
         # Initialize ground truth CSV file
