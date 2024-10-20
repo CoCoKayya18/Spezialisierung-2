@@ -12,6 +12,7 @@ import glob
 import os
 import json
 import tf 
+import threading
 
 class Utils:
     
@@ -67,7 +68,7 @@ class Utils:
     def transform_scan_to_map(self, scan_msg):
         
         transformed_scan = LaserScan()
-        transformed_scan.header.frame_id = "map"  # Set new frame_id for map
+        transformed_scan.header.frame_id = "base_scan"  
         transformed_scan.header.stamp = scan_msg.header.stamp
         transformed_scan.angle_min = scan_msg.angle_min
         transformed_scan.angle_max = scan_msg.angle_max
@@ -253,3 +254,48 @@ class Utils:
         # Write the updated data back to the file
         with open(self.correctionJsonPath, 'w') as json_file:
             json.dump(existing_data, json_file, indent=4)
+            
+    def visualize_and_save_laserscan(self, scan_msg, counter):
+
+        save_directory = "/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/laserScan_Plots"
+        
+        num_points = len(scan_msg.ranges)
+        
+        # Convert polar coordinates (range, angle) to Cartesian (x, y)
+        angles = np.linspace(scan_msg.angle_min, scan_msg.angle_max, num_points)
+        ranges = np.array(scan_msg.ranges)
+        
+        # Filter out invalid ranges (inf or NaN)
+        valid_indices = np.isfinite(ranges)
+        ranges = ranges[valid_indices]
+        angles = angles[valid_indices]
+        
+        # Convert to Cartesian coordinates
+        x_coords = ranges * np.cos(angles)
+        y_coords = ranges * np.sin(angles)
+        
+        rotated_x_coords = -y_coords
+        rotated_y_coords = x_coords
+        
+        # Plotting
+        plt.figure()
+        plt.scatter(rotated_x_coords, rotated_y_coords, c='b', s=5, label='LaserScan Points')
+        plt.title('LaserScan Data (Rotated)')
+        plt.xlabel('X [m] (Up)')
+        plt.ylabel('Y [m] (Left)')
+        plt.axis('equal')
+        plt.legend()
+
+        # Create the save directory if it doesn't exist
+        if not os.path.exists(save_directory):
+            os.makedirs(save_directory)
+
+        # Save the plot
+        save_path = os.path.join(save_directory, f'laserscan_plot_{counter}.png')
+        plt.savefig(save_path)
+        plt.close()
+    
+    def plot_async(self, target_func, *args, **kwargs):
+        # Use threading to call the target plotting function asynchronously
+        threading.Thread(target=target_func, args=args, kwargs=kwargs).start()
+

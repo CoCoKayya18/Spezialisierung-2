@@ -20,7 +20,7 @@ class EKFSLAM:
         self.covariance = np.eye(3)
         self.num_landmarks = 0 
         self.state = np.eye(3)
-        self.alpha = 0.5
+        self.alpha = 3
 
         self.F_x = np.eye(3)
         
@@ -99,12 +99,12 @@ class EKFSLAM:
         y = self.state[1].item()
         theta = self.state[2].item()
         
-        rospy.loginfo(f"Scan message in correction: {scanMessage.ranges}")
+        # rospy.loginfo(f"Scan message in correction: {scanMessage.ranges}")
 
         # Feature Extraction Step
         # z_t = self.sensor.extract_features_from_scan(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment)
 
-        z_t = self.sensor.detect_corners_and_circles_ransac(scanMessage.ranges, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment, self.correctionCounter)
+        z_t = self.sensor.detect_corners_and_circles_ransac(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment, self.correctionCounter)
 
         # Start observation loop
 
@@ -178,7 +178,7 @@ class EKFSLAM:
             # Initialize landmark uncertainty proportional to the range measurement
             # initial_landmark_uncertainty = (z_i[0] ** 2) / 130
             
-            initial_landmark_uncertainty = 1e2
+            initial_landmark_uncertainty = 1e5
 
             # initial_landmark_uncertainty = 10
 
