@@ -9,10 +9,11 @@ import os
 from sklearn.linear_model import RANSACRegressor
 
 class Sensor:
-    def __init__(self, config):
+    def __init__(self, config, utils):
         rospy.loginfo("Sensor class initialized")
         self.plot_counter = 1
         self.first_call = True
+        self.utils = utils
         pass
 
     def extract_features_from_scan(self, scan_data, angle_min, angle_max, angle_increment, eps=0.15, min_samples=5):
@@ -127,23 +128,26 @@ class Sensor:
         return filtered_corners
 
     def detect_corners_and_circles_ransac(self, lidar_data, angle_min, angle_max, angle_increment, counter, distance_threshold=0.75, angle_threshold=np.pi / 3):
-        lidar_data = np.array(lidar_data)
-        valid_ranges = np.isfinite(lidar_data) & (lidar_data > 0)
-        lidar_data = lidar_data[valid_ranges]
-
-        num_points = len(lidar_data)
-
-        # Calculate angles for each point in the scan
+        
+        num_points = len(lidar_data.ranges)
+        
+        # Convert polar coordinates (range, angle) to Cartesian (x, y)
         angles = angle_min + np.arange(num_points) * angle_increment
-
-        # Convert polar coordinates (range, angle) to Cartesian coordinates (x, y)
-        x_coords = lidar_data * np.cos(angles)
-        y_coords = lidar_data * np.sin(angles)
+        ranges = np.array(lidar_data.ranges)
+        
+        # Filter out invalid ranges (inf or NaN)
+        valid_indices = np.isfinite(ranges)
+        ranges = ranges[valid_indices]
+        angles = angles[valid_indices]
+        
+        # Convert to Cartesian coordinates
+        x_coords = ranges * np.cos(angles)
+        y_coords = ranges * np.sin(angles)
 
         points = np.vstack((x_coords, y_coords)).T
 
         # Detect lines using RANSAC
-        lines = self.detect_lines_ransac(points)
+        lines = self.detect_lines_ransac(points, counter)
         
         # Detect line intersections (corners)
         corners = self.detect_line_intersections(lines)
@@ -164,9 +168,8 @@ class Sensor:
             circle_polar_coords = []
 
         # Visualize the results
-        self.visualize_lidar_data(points, corners, [best_circle], lines, counter, base_name="lidar_extraction")
-        
-        rospy.loginfo(type(circle_polar_coords))
+        self.utils.plot_async(self.visualize_lidar_data, points, corners, [best_circle], lines, counter, base_name="lidar_extraction")
+        # self.visualize_lidar_data(points, corners, [best_circle], lines, counter, base_name="lidar_extraction")
         
         features = corner_polar_coords + circle_polar_coords
         
@@ -174,11 +177,15 @@ class Sensor:
 
         return features
 
-    def detect_lines_ransac(self, points, residual_threshold=0.2, min_samples=2, max_trials=1000, stop_probability=0.99, min_inliers=2):
+    def detect_lines_ransac(self, points, loopCounter, residual_threshold=0.02, min_samples=3, max_trials=1000, stop_probability=0.99, min_inliers=6):
         lines = []
         remaining_points = points.copy()
+        iteration = 0
 
         while len(remaining_points) > min_inliers:
+            
+            iteration += 1
+            
             # Fit a line using RANSAC
             x_coords = remaining_points[:, 0].reshape(-1, 1)  # reshape for sklearn
             y_coords = remaining_points[:, 1]
@@ -200,13 +207,54 @@ class Sensor:
 
             # Store the detected line
             lines.append((slope, intercept))
+            
+            #  # Visualize current iteration
+            self.utils.plot_async(self.visualize_ransac_iteration, remaining_points, inlier_mask, slope, intercept, iteration, loopCounter)
+            # self.visualize_ransac_iteration(remaining_points, inlier_mask, slope, intercept, iteration, loopCounter)
 
             # Remove inliers from the point set to detect more lines
             remaining_points = remaining_points[outlier_mask]
 
         return lines
+    
+    def visualize_ransac_iteration(self, points, inlier_mask, slope, intercept, iteration, loopCounter):
 
-    def detect_line_intersections(self, lines):
+        save_dir = "/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/RansacLinesInIteration"
+
+        # Separate inliers and outliers for plotting
+        inliers = points[inlier_mask]
+        outliers = points[np.logical_not(inlier_mask)]
+
+        # Create a new figure for each iteration
+        plt.figure(figsize=(10, 10))
+
+        # Plot inliers in blue
+        plt.scatter(inliers[:, 0], inliers[:, 1], c='blue', label='Inliers')
+
+        # Plot outliers in red
+        plt.scatter(outliers[:, 0], outliers[:, 1], c='red', label='Outliers')
+
+        # Plot the detected line
+        x_vals = np.array([points[:, 0].min(), points[:, 0].max()])  # x-range for the line
+        y_vals = slope * x_vals + intercept  # y = mx + b for the line
+        plt.plot(x_vals, y_vals, 'g-', linewidth=2, label=f'Line: y={slope:.2f}x+{intercept:.2f}')
+
+        # Set plot details
+        plt.title(f'RANSAC Line Detection - Loop {loopCounter} - Iteration {iteration}')
+        plt.xlabel('X [meters]')
+        plt.ylabel('Y [meters]')
+        plt.legend()
+        plt.grid(True)
+        plt.axis('equal')
+
+        # Save the plot for this iteration
+        filename = f'ransac_loop_{loopCounter}_iteration_{iteration}.png'
+        filepath = os.path.join(save_dir, filename)
+        plt.savefig(filepath)
+        plt.close()
+
+
+    def detect_line_intersections(self, lines, parallel_tolerance=1e-1):
         intersections = []
         for i in range(len(lines)):
             for j in range(i + 1, len(lines)):
@@ -214,8 +262,12 @@ class Sensor:
                 slope2, intercept2 = lines[j]
 
                 # Check if lines are parallel
-                if slope1 == slope2:
-                    continue  # Parallel lines do not intersect
+                if abs(slope1 - slope2) < parallel_tolerance:
+                    continue
+                
+                # # Check if lines are parallel
+                # if slope1 == slope2:
+                #     continue  # Parallel lines do not intersect
 
                 # Calculate the intersection point (x, y)
                 x_intersection = (intercept2 - intercept1) / (slope1 - slope2)
@@ -323,12 +375,24 @@ class Sensor:
             circles = np.array(circles)
             plt.scatter(circles[:, 0], circles[:, 1], c='blue', s=100, marker='o', label="Circle Centers")
 
-        # Plot the detected RANSAC lines
+        # # Plot the detected RANSAC lines
+        # for slope, intercept in lines:
+        #     x_vals = np.array([min(points[:, 0]), max(points[:, 0])])
+        #     y_vals = slope * x_vals + intercept
+        #     plt.plot(x_vals, y_vals, label=f"Line: y={slope:.2f}x+{intercept:.2f}")
+        
         for slope, intercept in lines:
-            x_vals = np.array([min(points[:, 0]), max(points[:, 0])])
-            y_vals = slope * x_vals + intercept
-            plt.plot(x_vals, y_vals, label=f"Line: y={slope:.2f}x+{intercept:.2f}")
+            # Select the range of x values from the points in the cluster
+            x_values = points[:, 0]
+            x_min, x_max = np.min(x_values), np.max(x_values)
 
+            # Calculate the corresponding y values for the line
+            y_min = slope * x_min + intercept
+            y_max = slope * x_max + intercept
+
+            # Plot the line segment within the range of the LiDAR points
+            plt.plot([x_min, x_max], [y_min, y_max], label=f"Line: y={slope:.2f}x+{intercept:.2f}", linewidth=3)
+        
         # Set plot details
         plt.title("LiDAR Data with Detected Corners, Circles, and Lines")
         plt.xlabel("X [meters]")
@@ -342,7 +406,5 @@ class Sensor:
         filepath = os.path.join(save_folder, filename)
         plt.savefig(filepath)
         plt.close()
-
-        print(f"Saved visualization: {filepath}")
 
         

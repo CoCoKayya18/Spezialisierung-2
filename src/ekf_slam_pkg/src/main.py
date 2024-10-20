@@ -28,9 +28,9 @@ def main():
         'measurement_noise': rospy.get_param("ekf/measurement_noise")
     }
     
-    sensor = Sensor(config)
     map = Map(config)
     utils = Utils()
+    sensor = Sensor(config, utils)
     ekf_slam = EKFSLAM(None, sensor, map, config, utils)  # Initialize without robot first
     
     robot = Robot(config, ekf_slam, utils)

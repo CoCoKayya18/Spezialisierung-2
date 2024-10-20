@@ -62,22 +62,29 @@ class Robot:
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/H_Jacobian_Plots")
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/Kalman_Plots")
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/Psi_Plots")
+        self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/laserScan_Plots")
+        self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/FeatureExtraction")
+        self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/RansacLinesInIteration")
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data")
 
         # Initialize CSV files with headers
         self.utils.initialize_csv_files(ground_truth_csv_path, ekf_path_csv_path, odom_velocities_csv_path)
         
+        self.correctionCounter = 1
+        
     def odom_callback(self, msg):
 
         # self.current_pose = self.state
-        self.current_vel = self.utils.transform_odometry_to_world(msg)
         
         with self.lock:
         
+            self.current_vel = self.utils.transform_odometry_to_world(msg)
             ekf_predicted_pose, ekf_predicted_covariance = self.ekf_slam.predict(self.current_vel, self.state, self.covariance, self.num_landmarks)  # Run the EKF prediction
 
             self.state = ekf_predicted_pose
             self.covariance = ekf_predicted_covariance
+            
+            self.publish_transform()
             
             rospy.loginfo(f"\n State Vector after Prediction:\n{self.state}")
 
@@ -89,19 +96,20 @@ class Robot:
             # self.utils.save_odom_velocities_to_csv(msg)
 
     def scan_callback(self, msg):
+
+        # transformed_scan = self.utils.transform_scan_to_map(msg)
         
-        # translation = (-0.032, 0.0, 0.172)  
-        # rotation_quaternion = (0.0, 0.0, 0.0, 1.0)
-
-        transformed_scan = self.utils.transform_scan_to_map(msg)
-
-        rospy.loginfo(f"Before Transformation: {msg.ranges}")
-
-        self.scan_message = transformed_scan
+        transformed_scan = msg
         
-        rospy.loginfo(f"After Transformation: {self.scan_message.ranges}")
+        # self.utils.visualize_and_save_laserscan(transformed_scan, self.correctionCounter)
+        # self.utils.plot_async(self.utils.visualize_and_save_laserscan, transformed_scan, self.correctionCounter)
+        
+        self.correctionCounter += 1
+        
 
         with self.lock:
+
+            self.scan_message = transformed_scan
         
             ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
 
@@ -128,37 +136,25 @@ class Robot:
         x, y, theta = self.state[0], self.state[1], self.state[2]
 
         # Create a quaternion from yaw (theta)
-        # quaternion = tf.transformations.quaternion_from_euler(0, 0, 0)
-        quaternion = tf.transformations.quaternion_from_euler(0, 0, theta)
+        quaternion = tf.transformations.quaternion_from_euler(0, 0, 0)
+        # quaternion = tf.transformations.quaternion_from_euler(0, 0, theta)
 
         self.tf_broadcaster.sendTransform(
-            (0, 0, 0),         # No translation
-            tf.transformations.quaternion_from_euler(0, 0, 0),  # No rotation
+            # (x, y, 0),
+            (0, 0, 0),         
+            quaternion,  
             rospy.Time.now(),   # Current time
             "odom",        # Child frame
             "map"              # Parent frame
         )
         
-        # Additionally, broadcast a static transform from odom -> base_link (for completeness)
-        self.tf_broadcaster.sendTransform(
-            (0, 0, 0),         # No translation
-            tf.transformations.quaternion_from_euler(0, 0, 0),  # No rotation
-            rospy.Time.now(),   # Current time
-            "base_link",        # Child frame
-            "odom"              # Parent frame
-        )
-        
-        # Broadcast the transform from map -> odom
-        self.tf_broadcaster.sendTransform(
-            # (0, 0, 0),  # Translation (x, y, z)
-            (x, y, 0),
-            quaternion,  # Rotation as a quaternion
-            rospy.Time.now(),
-            # "odom",  # Child frame (the frame that's moving relative to map)
-            "base_link",
-            "map"    # Parent frame (the static map frame)
-        )
-        
+        # self.tf_broadcaster.sendTransform(
+        #     (0, 0, 0),  # No translation for odom to base_link
+        #     tf.transformations.quaternion_from_euler(0, 0, 0),  # Identity quaternion
+        #     rospy.Time.now(),
+        #     "base_link",  # Child frame
+        #     "odom"  # Parent frame
+        # )
         
 
     def publish_GT_path(self, path, namespace, color):
