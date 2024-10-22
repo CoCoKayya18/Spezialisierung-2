@@ -2,6 +2,31 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import shutil
+
+def clear_directory(directory_path):
+    """
+    Clears all files in the specified directory.
+    If the directory doesn't exist, it will create it.
+    """
+    if os.path.exists(directory_path):
+        # If the directory exists, delete all its contents
+        for filename in os.listdir(directory_path):
+            file_path = os.path.join(directory_path, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)  # Remove file or link
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)  # Remove directory and its contents
+            except Exception as e:
+                print(f'Failed to delete {file_path}. Reason: {e}')
+    else:
+        # Create the directory if it doesn't exist
+        os.makedirs(directory_path)
+        print(f"Directory created: {directory_path}")
+
+    print(f"Directory {directory_path} is cleared.")
+
 
 # Create directory for saving plots
 def create_directory(directory_name):
@@ -424,7 +449,57 @@ def plot_pi_values(data, save_dir):
     plt.close()
 
     print(f"Pi values plot saved in {save_dir}")
+    
+def visualize_ransac_from_json(data, save_dir):
+    """
+    Visualizes the RANSAC lines with inliers and outliers for each iteration based on the stored data in the JSON file.
+    """
+    save_dir = os.path.join(save_dir, "RansacFeatureAnaysis")
+    create_directory(save_dir)
+    
+    clear_directory(save_dir)
 
+    for correction in data:
+        if "features" in correction['correction'] and "lines" in correction['correction']['features']:
+            lines_data = correction['correction']['features']['lines']
+
+            for line_data in lines_data:
+                iteration = line_data['iteration']
+                loopCounter = line_data['loopCounter']
+                slope = line_data['slope']
+                intercept = line_data['intercept']
+                inliers = np.array(line_data['inliers'])
+                outliers = np.array(line_data['outliers'])
+
+                # Create a new figure for each iteration
+                plt.figure(figsize=(10, 10))
+
+                # Plot inliers in blue
+                plt.scatter(inliers[:, 0], inliers[:, 1], c='blue', label='Inliers')
+
+                # Plot outliers in red
+                plt.scatter(outliers[:, 0], outliers[:, 1], c='red', label='Outliers')
+
+                # Plot the detected line
+                x_vals = np.array([inliers[:, 0].min(), inliers[:, 0].max()])  # x-range for the line
+                y_vals = slope * x_vals + intercept  # y = mx + b for the line
+                plt.plot(x_vals, y_vals, 'g-', linewidth=2, label=f'Line: y={slope:.2f}x+{intercept:.2f}')
+
+                # Set plot details
+                plt.title(f'RANSAC Line Detection - Loop {loopCounter} - Iteration {iteration}')
+                plt.xlabel('X [meters]')
+                plt.ylabel('Y [meters]')
+                plt.legend()
+                plt.grid(True)
+                plt.axis('equal')
+
+                # Save the plot for this iteration
+                filename = f'ransac_loop_{loopCounter}_iteration_{iteration}.png'
+                filepath = os.path.join(save_dir, filename)
+                plt.savefig(filepath)
+                plt.close()
+
+                # print(f"Saved plot for Loop {loopCounter}, Iteration {iteration} to {filepath}")
 
 
 # Main function to run all analysis
@@ -459,13 +534,15 @@ def analyze_ekf_slam(file_path, output_dir):
     plot_state_after_corrections(data, output_dir)
     
     plot_pi_values(data, output_dir)
+    
+    # visualize_ransac_from_json(data, output_dir)
 
     print(f'Analysis complete. Plots saved in {output_dir}')
 
 # Example usage
 if __name__ == "__main__":
     # Define file paths
-    json_file_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/correctionData.json'  # Replace with your actual JSON file path
+    json_file_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/correctionData.json'  
     output_directory = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/correctionAnalysisOutput'
 
     # Run the analysis

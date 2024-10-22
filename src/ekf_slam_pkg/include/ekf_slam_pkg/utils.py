@@ -295,7 +295,7 @@ class Utils:
         plt.savefig(save_path)
         plt.close()
     
-    def plot_async(self, target_func, *args, **kwargs):
-        # Use threading to call the target plotting function asynchronously
-        threading.Thread(target=target_func, args=args, kwargs=kwargs).start()
+    # def plot_async(self, target_func, *args, **kwargs):
+    #     # Use threading to call the target plotting function asynchronously
+    #     threading.Thread(target=target_func, args=args, kwargs=kwargs).start()
 

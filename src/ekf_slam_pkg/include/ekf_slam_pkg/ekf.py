@@ -6,7 +6,7 @@ import sys
 from geometry_msgs.msg import Pose
 from tf.transformations import euler_from_quaternion
 from tf.transformations import quaternion_from_euler
-import json
+import ujson as json
 
 
 class EKFSLAM:
@@ -133,8 +133,47 @@ class EKFSLAM:
                 },
                 "final_state": None,
                 "final_covariance": None
+                # "features": {  # Add features section for lines, circles, corners, points
+                #     "lines": [],
+                #     "corners": [],
+                #     "circles": [],
+                #     "points": []
+                # }
             }
         }
+        
+        lines_data = self.sensor.get_lines()
+        corners = self.sensor.get_corners()
+        circles = self.sensor.get_circles()
+        points = self.sensor.get_points()
+        
+        # if lines_data:
+        #     correction_data["correction"]["features"]["lines"] = [
+        #         {
+        #             "slope": line["slope"],
+        #             "intercept": line["intercept"],
+        #             "iteration": line["iteration"],
+        #             "loopCounter": line["loopCounter"],
+        #             "inliers": line["inliers"],  # Store inliers for visualization
+        #             "outliers": line["outliers"]  # Store outliers for visualization
+        #         }
+        #         for line in lines_data
+        #     ]
+
+        # if corners:
+        #     correction_data["correction"]["features"]["corners"] = [
+        #         {"x": x, "y": y} for x, y in corners
+        #     ]
+
+        # if circles:
+        #     correction_data["correction"]["features"]["circles"] = [
+        #         {"x_center": xc, "y_center": yc, "radius": radius} for xc, yc, radius in circles
+        #     ]
+
+        # if points is not None:
+        #     correction_data["correction"]["features"]["points"] = [
+        #         {"x": x, "y": y} for x, y in points
+        #     ]
 
         for z_i in z_t:
 
