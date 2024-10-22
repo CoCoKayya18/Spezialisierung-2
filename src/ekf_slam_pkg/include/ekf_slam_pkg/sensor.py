@@ -6,6 +6,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import os
+import json
 from sklearn.linear_model import RANSACRegressor
 
 class Sensor:
@@ -14,6 +15,12 @@ class Sensor:
         self.plot_counter = 1
         self.first_call = True
         self.utils = utils
+        
+        self.lines_data = []
+        self.corners = None
+        self.circles = None
+        self.points = None
+        
         pass
 
     def extract_features_from_scan(self, scan_data, angle_min, angle_max, angle_increment, eps=0.15, min_samples=5):
@@ -145,15 +152,19 @@ class Sensor:
         y_coords = ranges * np.sin(angles)
 
         points = np.vstack((x_coords, y_coords)).T
+        
+        self.points = points
 
         # Detect lines using RANSAC
         lines = self.detect_lines_ransac(points, counter)
         
         # Detect line intersections (corners)
         corners = self.detect_line_intersections(lines)
+        self.corners = corners
 
         # Detect circles using RANSAC
         # best_circle, circle_inliers = self.detect_circles_ransac(points)
+        # self.circles = best_circle
         
         best_circle = None
 
@@ -168,16 +179,18 @@ class Sensor:
             circle_polar_coords = []
 
         # Visualize the results
-        self.utils.plot_async(self.visualize_lidar_data, points, corners, [best_circle], lines, counter, base_name="lidar_extraction")
+        # self.utils.plot_async(self.visualize_lidar_data, points, corners, [best_circle], lines, counter, base_name="lidar_extraction")
         # self.visualize_lidar_data(points, corners, [best_circle], lines, counter, base_name="lidar_extraction")
         
         features = corner_polar_coords + circle_polar_coords
         
-        rospy.loginfo(f"Features: {features}")
+        # rospy.loginfo(f"Features: {features}")
+        
+        # self.save_features(lines, [best_circle] if best_circle else [])
 
         return features
 
-    def detect_lines_ransac(self, points, loopCounter, residual_threshold=0.02, min_samples=3, max_trials=1000, stop_probability=0.99, min_inliers=6):
+    def detect_lines_ransac(self, points, loopCounter, residual_threshold=0.0275, min_samples=3, max_trials=1000, stop_probability=0.99, min_inliers=8):
         lines = []
         remaining_points = points.copy()
         iteration = 0
@@ -209,8 +222,17 @@ class Sensor:
             lines.append((slope, intercept))
             
             #  # Visualize current iteration
-            self.utils.plot_async(self.visualize_ransac_iteration, remaining_points, inlier_mask, slope, intercept, iteration, loopCounter)
+            # self.utils.plot_async(self.visualize_ransac_iteration, remaining_points, inlier_mask, slope, intercept, iteration, loopCounter)
             # self.visualize_ransac_iteration(remaining_points, inlier_mask, slope, intercept, iteration, loopCounter)
+            
+            self.lines_data.append({
+                "iteration": iteration,
+                "loopCounter": loopCounter,
+                "slope": slope,
+                "intercept": intercept,
+                "inliers": remaining_points[inlier_mask].tolist(),  # Save inlier points for visualization
+                "outliers": remaining_points[outlier_mask].tolist()  # Save outlier points for visualization
+            })
 
             # Remove inliers from the point set to detect more lines
             remaining_points = remaining_points[outlier_mask]
@@ -343,6 +365,22 @@ class Sensor:
 
         return filtered_corners
 
+    # def save_features(self, lines, circles, filename="features.json"):
+        
+    #     filename = "/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/features.json"
+        
+    #     # Prepare data to be saved
+    #     data = {
+    #         "lines": [{"slope": slope, "intercept": intercept} for slope, intercept in lines],
+    #         "circles": [{"x_center": xc, "y_center": yc, "radius": radius} for xc, yc, radius in circles] if circles else []
+    #     }
+
+    #     # Save the data to a JSON file
+    #     with open(filename, "w") as f:
+    #         json.dump(data, f)
+
+    #     rospy.loginfo(f"Features saved to {filename}")
+
     def visualize_lidar_data(self, points, corners, circles, lines, counter, save_folder = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/FeatureExtraction', base_name="extraction_step"):
         # Check if this is the first call and clear the folder
         if self.first_call:
@@ -407,4 +445,17 @@ class Sensor:
         plt.savefig(filepath)
         plt.close()
 
-        
+    def get_lines(self):
+        return self.lines_data
+
+    # Getter for corners
+    def get_corners(self):
+        return self.corners
+
+    # Getter for circles
+    def get_circles(self):
+        return self.circles
+
+    # Getter for points
+    def get_points(self):
+        return self.points
