@@ -102,9 +102,11 @@ class EKFSLAM:
         # rospy.loginfo(f"Scan message in correction: {scanMessage.ranges}")
 
         # Feature Extraction Step
-        # z_t = self.sensor.extract_features_from_scan(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment)
+        z_t = self.sensor.extract_features_from_scan(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment, self.correctionCounter)
 
-        z_t = self.sensor.detect_corners_and_circles_ransac(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment, self.correctionCounter)
+        rospy.loginfo(f"Extracted features: {z_t}")
+
+        # z_t = self.sensor.detect_corners_and_circles_ransac(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment, self.correctionCounter)
 
         # Start observation loop
 
@@ -142,10 +144,10 @@ class EKFSLAM:
             }
         }
         
-        lines_data = self.sensor.get_lines()
-        corners = self.sensor.get_corners()
-        circles = self.sensor.get_circles()
-        points = self.sensor.get_points()
+        # lines_data = self.sensor.get_lines()
+        # corners = self.sensor.get_corners()
+        # circles = self.sensor.get_circles()
+        # points = self.sensor.get_points()
         
         # if lines_data:
         #     correction_data["correction"]["features"]["lines"] = [

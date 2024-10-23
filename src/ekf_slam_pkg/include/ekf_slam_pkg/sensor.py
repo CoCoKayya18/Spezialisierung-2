@@ -17,13 +17,14 @@ class Sensor:
         self.utils = utils
         
         self.lines_data = []
+        self.circles_data = []
         self.corners = None
         self.circles = None
         self.points = None
         
         pass
 
-    def extract_features_from_scan(self, scan_data, angle_min, angle_max, angle_increment, eps=0.15, min_samples=5):
+    def extract_features_from_scan(self, scan_data, angle_min, angle_max, angle_increment, counter, eps=0.2, min_samples=5):
             # Extracts features from LiDAR scan data using DBSCAN clustering
 
             # Extract ranges from the LaserScan message
@@ -51,7 +52,8 @@ class Sensor:
             labels = db.labels_
 
             # Extract features from each cluster
-            features = []
+            # features = []
+            cluster_dict = {}
             unique_labels = set(labels)
             
             for label in unique_labels:
@@ -61,78 +63,114 @@ class Sensor:
                 # Extract points belonging to the current cluster
                 cluster_points = valid_points[labels == label]
                 
-                cluster_center_x, cluster_center_y = cluster_points.mean(axis=0)
-
-                # Convert back to polar coordinates (r, phi)
-                r = np.sqrt(cluster_center_x**2 + cluster_center_y**2)
-                phi = np.arctan2(cluster_center_y, cluster_center_x)
-
-                # Append the polar coordinates (r, phi) to the features list
-                features.append((r, phi))
+                # Save cluster points in a dictionary
+                cluster_dict[label] = cluster_points
             
-            self.visualize_features(valid_points, labels, features)
+            features = []
+            line_features = []
+            circle_feature = []
+            corner_features = []
+            
+            for cluster_label, cluster_points in cluster_dict.items():
+                # Here you can decide whether to apply RANSAC for circles or lines
+                if self.is_circle(cluster_points):
+                    circle_feature = circle_feature + self.detect_circles_ransac(cluster_points, counter)
+                else:
+                    line_features = line_features + self.detect_lines_ransac(cluster_points, counter)
+                    corner_features = corner_features + self.detect_line_intersections(line_features)
 
-            # print(f"\n Following features detected: {features}")
+            if corner_features:
+                # Convert corner features to polar coordinates and append to features list
+                for corner in corner_features:
+                    polar_corner = self.cartesian_to_polar(corner[0], corner[1])
+                    features.append(polar_corner)
+
+            if circle_feature:
+                # Convert circle features to polar coordinates and append to features list
+                for circle in circle_feature:
+                    circle_center_x, circle_center_y, radius = circle
+                    polar_circle_center = self.cartesian_to_polar(circle_center_x, circle_center_y)
+                    # Append as (r, phi, radius)
+                    features.append(polar_circle_center)
+
+            self.visualize_features(valid_points, labels, line_features, corner_features, circle_feature, counter)
+
+            rospy.loginfo(f"\n Following features detected: {features}")
             
             return features
+        
+    def is_circle(self, cluster_points, variance_threshold=0.0075, min_inliers=10, angular_threshold=np.pi/2):
+        # Check if the points in the cluster form a circular pattern using the variance of radii
+        x_coords, y_coords = cluster_points[:, 0], cluster_points[:, 1]
+        mean_x, mean_y = np.mean(x_coords), np.mean(y_coords)
+        
+        # Compute distances from the center (mean_x, mean_y)
+        distances = np.sqrt((x_coords - mean_x)**2 + (y_coords - mean_y)**2)
+        radius_variance = np.var(distances)
 
-    def visualize_features(self, valid_points, labels, features):
-        # Extract features using DBSCAN
-        # features, labels, valid_points = self.extract_features_from_scan(scan_data, angle_min, angle_max, angle_increment, eps, min_samples)
+        # Calculate angular spread
+        angles = np.arctan2(y_coords - mean_y, x_coords - mean_x)
+        angular_spread = np.max(angles) - np.min(angles)
+        
+        # Normalize angles to handle angle wrap-around (i.e., between -pi and pi)
+        if angular_spread > np.pi:
+            angular_spread = 2 * np.pi - angular_spread
+        
+        # Log radius variance and angular spread for debugging
+        rospy.loginfo(f"Radius Variance: {radius_variance}, Angular Spread: {angular_spread}")
+        
+        # Classify as a circle based on the variance of radii and angular spread
+        return radius_variance < variance_threshold and len(cluster_points) >= min_inliers and angular_spread > angular_threshold
 
-        save_dir = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/DBSCAN_Plots'
+    def visualize_features(self, valid_points, labels, line_features, corner_features, circle_features, loopCounter):
+        save_dir = "/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/FeatureExtraction"
+        
+        rospy.loginfo(f"Line features: {line_features}")
+        rospy.loginfo(f"Corner features: {corner_features}")
+        rospy.loginfo(f"Circle features: {circle_features}")
+        
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
 
-        # Check if this is the first call
-        if self.first_call:
-            # Remove all existing plots in the directory
-            if os.path.exists(save_dir):
-                for file_name in os.listdir(save_dir):
-                    file_path = os.path.join(save_dir, file_name)
-                    try:
-                        if os.path.isfile(file_path):
-                            os.remove(file_path)
-                            rospy.loginfo(f"Deleted existing plot: {file_path}")
-                    except Exception as e:
-                        rospy.logerr(f"Error deleting file {file_path}: {e}")
-            else:
-                os.makedirs(save_dir)  # Create the directory if it doesn't exist
-            self.first_call = False  # Set the flag to False after the first call
-
-        # Plot the LiDAR scan points
+        # Create a new figure
         plt.figure(figsize=(10, 10))
-        plt.scatter(valid_points[:, 0], valid_points[:, 1], c=labels, cmap='tab20', s=10, label='Scan Points')
 
-        # Plot the extracted features (cluster centers)
-        features = np.array(features)
-        plt.scatter(features[:, 0], features[:, 1], c='red', s=100, marker='x', label='Extracted Features (Cluster Centers)')
+        # Plot all valid points (LiDAR points) with a light color
+        plt.scatter(valid_points[:, 0], valid_points[:, 1], c='gray', label='LiDAR Points', alpha=0.5)
+
+        # Plot detected lines (in blue)
+        if line_features:
+            for slope, intercept in line_features:
+                x_vals = np.array([valid_points[:, 0].min(), valid_points[:, 0].max()])  # x-range for the line
+                y_vals = slope * x_vals + intercept  # y = mx + b for the line
+                plt.plot(x_vals, y_vals, 'b-', linewidth=2, label='Detected Line')
+
+        # Plot detected circles (in green)
+        if circle_features:
+            for circle in circle_features:
+                # Unpack the tuple from the list inside 'circle'
+                xc, yc, radius = circle
+                circle_patch = plt.Circle((xc, yc), radius, color='g', fill=False, linewidth=2, label='Detected Circle')
+                plt.gca().add_patch(circle_patch)
+        
+        # Plot detected corners/intersections (in red)
+        if corner_features:
+            for x, y in corner_features:
+                plt.scatter(x, y, c='r', label='Corner/Intersection', s=100)
 
         # Set plot details
-        plt.title('LiDAR Scan Data and Extracted Features')
+        plt.title(f'Detected Features - Loop {loopCounter}')
         plt.xlabel('X [meters]')
         plt.ylabel('Y [meters]')
-        plt.grid(True)
         plt.legend()
+        plt.grid(True)
         plt.axis('equal')
 
-        # Save plot with sequential numbering
-        plot_filename = os.path.join(save_dir, f'plot_{self.plot_counter}.png')
-        plt.savefig(plot_filename)
-        plt.close()  # Close the plot to free memory
-        rospy.loginfo(f"Saved plot as {plot_filename}")
-
-        # Increment the plot counter
-        self.plot_counter += 1
-
-        if len(corners) == 0:
-            return corners
-        
-        filtered_corners = [corners[0]]
-        
-        for corner in corners[1:]:
-            if all(np.linalg.norm(np.array(corner) - np.array(fc)) > min_distance for fc in filtered_corners):
-                filtered_corners.append(corner)
-        
-        return filtered_corners
+        # Save the plot
+        filename = f'detected_features_loop_{loopCounter}.png'
+        filepath = os.path.join(save_dir, filename)
+        plt.savefig(filepath)
+        plt.close()
 
     def detect_corners_and_circles_ransac(self, lidar_data, angle_min, angle_max, angle_increment, counter, distance_threshold=0.75, angle_threshold=np.pi / 3):
         
@@ -160,6 +198,7 @@ class Sensor:
         
         # Detect line intersections (corners)
         corners = self.detect_line_intersections(lines)
+        corners = self.filter_corners_by_distance(corners)
         self.corners = corners
 
         # Detect circles using RANSAC
@@ -221,21 +260,29 @@ class Sensor:
             # Store the detected line
             lines.append((slope, intercept))
             
+            rospy.loginfo(f"Current lines array: {lines}")
+            
             #  # Visualize current iteration
             # self.utils.plot_async(self.visualize_ransac_iteration, remaining_points, inlier_mask, slope, intercept, iteration, loopCounter)
-            # self.visualize_ransac_iteration(remaining_points, inlier_mask, slope, intercept, iteration, loopCounter)
+            self.visualize_ransac_iteration(remaining_points, inlier_mask, slope, intercept, iteration, loopCounter)
             
-            self.lines_data.append({
-                "iteration": iteration,
-                "loopCounter": loopCounter,
-                "slope": slope,
-                "intercept": intercept,
-                "inliers": remaining_points[inlier_mask].tolist(),  # Save inlier points for visualization
-                "outliers": remaining_points[outlier_mask].tolist()  # Save outlier points for visualization
-            })
+            rospy.loginfo(f"Current 2 step lines array: {lines}")
+            
+            # self.lines_data.append({
+            #     "iteration": iteration,
+            #     "loopCounter": loopCounter,
+            #     "slope": slope,
+            #     "intercept": intercept,
+            #     "inliers": remaining_points[inlier_mask].tolist(),  # Save inlier points for visualization
+            #     "outliers": remaining_points[outlier_mask].tolist()  # Save outlier points for visualization
+            # })
 
             # Remove inliers from the point set to detect more lines
             remaining_points = remaining_points[outlier_mask]
+            
+            rospy.loginfo(f"Current 3 step lines array: {lines}")
+        
+        rospy.loginfo(f"Total lines detected: {len(lines)} at loop {loopCounter}")
 
         return lines
     
@@ -275,7 +322,6 @@ class Sensor:
         plt.savefig(filepath)
         plt.close()
 
-
     def detect_line_intersections(self, lines, parallel_tolerance=1e-1):
         intersections = []
         for i in range(len(lines)):
@@ -298,35 +344,72 @@ class Sensor:
 
         return intersections
 
-    def detect_circles_ransac(self, points, max_error=0.05, min_samples=3):
-        
-        best_circle = None
-        best_inliers = None
-        best_error = float('inf')
+    def detect_circles_ransac(self, points, loopCounter, max_error=0.05, min_samples=5, max_trials=1000, stop_inliers=0.9):
 
-        # Try fitting circles with RANSAC
-        for _ in range(1000):  # RANSAC iterations
-            
-            if len(points) < min_samples:
-                return None, None
-            
-            sample_indices = np.random.choice(len(points), min_samples, replace=False)
-            sample_points = points[sample_indices]
+        circles = []
+        remaining_points = points.copy()
+        iteration = 0
 
-            xs = sample_points[:, 0]
-            ys = sample_points[:, 1]
+        while len(remaining_points) > min_samples:
+            iteration += 1
 
-            # Fit a circle to the sample points
-            xc, yc, radius, error = self.fit_circle(xs, ys)
+            best_circle = None
+            best_inliers = None
+            best_error = float('inf')
 
-            if error < best_error and error < max_error:
-                inliers = np.where(np.abs(np.sqrt((points[:, 0] - xc) ** 2 + (points[:, 1] - yc) ** 2) - radius) < max_error)[0]
-                if len(inliers) > min_samples:
+            n_points = len(remaining_points)
+            if n_points < min_samples:
+                rospy.logwarn(f"Not enough points to detect a circle (min_samples={min_samples}, got {n_points}).")
+                break
+
+            for _ in range(max_trials):
+                # Randomly sample points for circle fitting
+                sample_indices = np.random.choice(n_points, min_samples, replace=False)
+                sample_points = remaining_points[sample_indices]
+
+                xs = sample_points[:, 0]
+                ys = sample_points[:, 1]
+
+                # Fit a circle to the sample points
+                xc, yc, radius, error = self.fit_circle(xs, ys)
+
+                if error is None or radius <= 0:
+                    continue  # Skip invalid circle fits
+
+                # Find inliers: points within max_error distance from the circle
+                distances = np.sqrt((remaining_points[:, 0] - xc) ** 2 + (remaining_points[:, 1] - yc) ** 2)
+                inliers = np.where(np.abs(distances - radius) < max_error)[0]
+
+                if len(inliers) > min_samples and error < best_error:
                     best_circle = (xc, yc, radius)
                     best_inliers = inliers
                     best_error = error
 
-        return best_circle, best_inliers if best_circle is not None else (None, None)
+                    # Early stop if enough inliers found
+                    if len(inliers) / n_points > stop_inliers:
+                        rospy.loginfo(f"Early stopping RANSAC with {len(inliers)} inliers.")
+                        break
+
+            if best_circle is None:
+                break  # No valid circle found, stop the process
+
+            # Store the detected circle in a similar format to lines
+            circles.append(best_circle)
+
+            self.circles_data.append({
+                "iteration": iteration,
+                "loopCounter": loopCounter,
+                "xc": best_circle[0],
+                "yc": best_circle[1],
+                "radius": best_circle[2],
+                "inliers": remaining_points[best_inliers].tolist(),  # Save inlier points for visualization
+                "outliers": remaining_points[np.logical_not(np.isin(np.arange(len(remaining_points)), best_inliers))].tolist()  # Save outlier points for visualization
+            })
+
+            # Remove inliers from the point set to detect more circles
+            remaining_points = remaining_points[np.logical_not(np.isin(np.arange(len(remaining_points)), best_inliers))]
+
+        return circles
     
     def fit_circle(self, xs, ys):
         if len(xs) < 3 or len(ys) < 3:
@@ -365,21 +448,10 @@ class Sensor:
 
         return filtered_corners
 
-    # def save_features(self, lines, circles, filename="features.json"):
-        
-    #     filename = "/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/features.json"
-        
-    #     # Prepare data to be saved
-    #     data = {
-    #         "lines": [{"slope": slope, "intercept": intercept} for slope, intercept in lines],
-    #         "circles": [{"x_center": xc, "y_center": yc, "radius": radius} for xc, yc, radius in circles] if circles else []
-    #     }
-
-    #     # Save the data to a JSON file
-    #     with open(filename, "w") as f:
-    #         json.dump(data, f)
-
-    #     rospy.loginfo(f"Features saved to {filename}")
+    def filter_corners_by_distance(self, corners, max_distance=3.5):
+        # Filter corners based on the distance from the origin (LiDAR position)
+        filtered_corners = [corner for corner in corners if np.linalg.norm(corner) <= max_distance]
+        return filtered_corners
 
     def visualize_lidar_data(self, points, corners, circles, lines, counter, save_folder = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/FeatureExtraction', base_name="extraction_step"):
         # Check if this is the first call and clear the folder
