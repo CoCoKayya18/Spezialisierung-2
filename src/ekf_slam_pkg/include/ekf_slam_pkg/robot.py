@@ -96,8 +96,6 @@ class Robot:
             # self.utils.save_odom_velocities_to_csv(msg)
 
     def scan_callback(self, msg):
-
-        # transformed_scan = self.utils.transform_scan_to_map(msg)
         
         transformed_scan = msg
         
@@ -147,15 +145,6 @@ class Robot:
             "odom",        # Child frame
             "map"              # Parent frame
         )
-        
-        # self.tf_broadcaster.sendTransform(
-        #     (0, 0, 0),  # No translation for odom to base_link
-        #     tf.transformations.quaternion_from_euler(0, 0, 0),  # Identity quaternion
-        #     rospy.Time.now(),
-        #     "base_link",  # Child frame
-        #     "odom"  # Parent frame
-        # )
-        
 
     def publish_GT_path(self, path, namespace, color):
         marker = Marker()
