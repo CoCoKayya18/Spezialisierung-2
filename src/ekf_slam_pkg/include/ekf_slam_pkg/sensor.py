@@ -3,7 +3,7 @@ import numpy as np
 from math import atan2, sqrt
 from sklearn.cluster import DBSCAN
 import matplotlib
-matplotlib.use('Agg')
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import os
 import json
@@ -50,6 +50,8 @@ class Sensor:
             # Apply DBSCAN clustering algorithm
             db = DBSCAN(eps=eps, min_samples=min_samples).fit(valid_points)
             labels = db.labels_
+            
+            self.visualize_dbscan_result(valid_points, labels, counter)
 
             # Extract features from each cluster
             # features = []
@@ -99,7 +101,7 @@ class Sensor:
             
             return features
         
-    def is_circle(self, cluster_points, variance_threshold=0.0075, min_inliers=10, angular_threshold=np.pi/2):
+    def is_circle(self, cluster_points, variance_threshold=0.046, min_inliers=12, angular_threshold=np.pi/4):
         # Check if the points in the cluster form a circular pattern using the variance of radii
         x_coords, y_coords = cluster_points[:, 0], cluster_points[:, 1]
         mean_x, mean_y = np.mean(x_coords), np.mean(y_coords)
@@ -140,23 +142,29 @@ class Sensor:
 
         # Plot detected lines (in blue)
         if line_features:
-            for slope, intercept in line_features:
+            for i, (slope, intercept) in enumerate(line_features):
                 x_vals = np.array([valid_points[:, 0].min(), valid_points[:, 0].max()])  # x-range for the line
                 y_vals = slope * x_vals + intercept  # y = mx + b for the line
                 plt.plot(x_vals, y_vals, 'b-', linewidth=2, label='Detected Line')
+                
+                mid_x = (x_vals[0] + x_vals[1]) / 2
+                mid_y = (y_vals[0] + y_vals[1]) / 2
+                plt.text(mid_x, mid_y, f'{i+1}', fontsize=12, color='blue', ha='center')
 
         # Plot detected circles (in green)
         if circle_features:
-            for circle in circle_features:
+            for i, circle in enumerate(circle_features):
                 # Unpack the tuple from the list inside 'circle'
                 xc, yc, radius = circle
                 circle_patch = plt.Circle((xc, yc), radius, color='g', fill=False, linewidth=2, label='Detected Circle')
                 plt.gca().add_patch(circle_patch)
+                plt.text(xc, yc, f'{i+1}', fontsize=12, color='green', ha='center')
         
         # Plot detected corners/intersections (in red)
         if corner_features:
-            for x, y in corner_features:
+            for i, (x, y) in enumerate(corner_features):
                 plt.scatter(x, y, c='r', label='Corner/Intersection', s=100)
+                plt.text(x, y, f'{i+1}', fontsize=12, color='red', ha='center')
 
         # Set plot details
         plt.title(f'Detected Features - Loop {loopCounter}')
@@ -170,6 +178,7 @@ class Sensor:
         filename = f'detected_features_loop_{loopCounter}.png'
         filepath = os.path.join(save_dir, filename)
         plt.savefig(filepath)
+        plt.show()
         plt.close()
 
     def detect_corners_and_circles_ransac(self, lidar_data, angle_min, angle_max, angle_increment, counter, distance_threshold=0.75, angle_threshold=np.pi / 3):
@@ -517,6 +526,45 @@ class Sensor:
         plt.savefig(filepath)
         plt.close()
 
+    def visualize_dbscan_result(self, points, labels, loop_counter):
+        
+        save_dir = "/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/DBSCAN_Plots"
+        
+        # Create a figure for the DBSCAN result
+        plt.figure(figsize=(10, 10))
+
+        # Get unique labels (clusters and noise points labeled as -1)
+        unique_labels = set(labels)
+        colors = [plt.cm.Spectral(each) for each in np.linspace(0, 1, len(unique_labels))]
+
+        # Plot each cluster with a different color
+        for k, col in zip(unique_labels, colors):
+            if k == -1:
+                # Black used for noise points (label -1)
+                col = [0, 0, 0, 1]
+
+            # Filter points belonging to the current cluster (k)
+            class_member_mask = (labels == k)
+            xy = points[class_member_mask]
+
+            # Plot the points for this cluster
+            plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor=tuple(col),
+                    markeredgecolor='k', markersize=8, label=f'Cluster {k}' if k != -1 else 'Noise')
+
+        # Set plot title and labels
+        plt.title(f'DBSCAN Clustering - Loop {loop_counter}')
+        plt.xlabel('X [meters]')
+        plt.ylabel('Y [meters]')
+        plt.legend()
+        plt.grid(True)
+        plt.axis('equal')
+
+        # Save the plot
+        filename = f'dbscan_result_loop_{loop_counter}.png'
+        filepath = os.path.join(save_dir, filename)
+        plt.savefig(filepath)
+        plt.close()
+    
     def get_lines(self):
         return self.lines_data
 
