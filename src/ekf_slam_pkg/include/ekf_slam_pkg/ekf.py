@@ -20,7 +20,7 @@ class EKFSLAM:
         self.covariance = np.eye(3)
         self.num_landmarks = 0 
         self.state = np.eye(3)
-        self.alpha = 3
+        self.alpha = 0.2
 
         self.F_x = np.eye(3)
         
@@ -186,19 +186,6 @@ class EKFSLAM:
             z_i = list(z_i)  # Convert the tuple to a list
             z_i[1] = self.utils.normalize_angle(z_i[1])  # Modify the angle
             z_i = tuple(z_i)  # Convert it back to a tuple if necessary
-
-            # Dönges Input bombe
-            # old_sig = nparray([oldx, oldy]) theoretical signature for tolerance treshhold 
-            # if oldSig < 10% x,y: 
-            #   keep oold -> newlandmark = oldSig[0], oldSig[1]
-            # else:
-            #   newLandmark = newLandmark
-            
-            # newLandmark_x, newLandmark_y, self.oldSignature = self.map.update_landmarks(x, y, theta, z_i, self.oldSignature)
-            # new_landmark = np.array([newLandmark_x, newLandmark_y])
-            
-            # rospy.loginfo(f"New landmark: {new_landmark}")
-            # rospy.loginfo(f"Old signature {self.oldSignature}")
                         
             # initialize new landmark and create tempoprary state and covariance matrices
             newLandmark_x, newLandmark_y = self.map.calculate_landmark_estimates(x, y, theta, z_i)
@@ -213,9 +200,9 @@ class EKFSLAM:
             tempCovariance = np.zeros((n + 2, n + 2))
             tempCovariance[:n, :n] = self.covariance
             # Initialize landmark uncertainty proportional to the range measurement
-            # initial_landmark_uncertainty = (z_i[0] ** 2) / 130
+            initial_landmark_uncertainty = (z_i[0] ** 2) / 130
             
-            initial_landmark_uncertainty = 1e5
+            # initial_landmark_uncertainty = 5
 
             # initial_landmark_uncertainty = 10
 
@@ -375,7 +362,7 @@ class EKFSLAM:
                 # Add match details to the "Matched" section
                 matched_observation = {
                     "observation_id": observation_counter,
-                    "matched_landmark_index": best_landmark_index,
+                    "matched_landmark_index": best_landmark_index + 1,
                     "landmarks": [
                         {
                             "landmark_id": best_landmark_index + 1,
@@ -412,12 +399,256 @@ class EKFSLAM:
         # self.utils.visualize_expected_Observation(z_hat_list, self.correctionCounter)
         self.correctionCounter += 1
         
+        rospy.loginfo(f"New State: {self.state}")
 
         end_time = time.time()
         elapsed_time = end_time - start_time
         print(f"\n Correction function took {elapsed_time:.6f} seconds.")
 
         return self.state, self.covariance, self.num_landmarks
+
+    # Correction with JCBB
+    def correct_with_jcbb(self, scanMessage, currentStateVector, currentCovarianceMatrix):
+        rospy.loginfo("\n === JCBB CORRECTION BEGINNING ====== JCBB CORRECTION BEGINNING ======")
+
+        start_time = time.time()
+
+        self.state = currentStateVector
+        self.covariance = currentCovarianceMatrix
+
+        x = self.state[0].item()
+        y = self.state[1].item()
+        theta = self.state[2].item()
+
+        # Feature Extraction Step
+        z_t = self.sensor.extract_features_from_scan(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment, self.correctionCounter)
+
+        # Start observation loop
+        observation_counter = 0
+        kalman_gain_list = []
+        best_z_hat_list = []
+        best_H_Matrix_list = []
+
+        # Initialize the structure to store the correction data
+        correction_data = {
+            "correction": {
+                "number": self.correctionCounter,
+                "initial_state": self.state.tolist(),
+                "initial_covariance": self.covariance.tolist(),
+                "All": {"observations": []},
+                "Matched": {"observations": []},
+                "newLandmarkData": {"landmarks": []},
+                "final_state": None,
+                "final_covariance": None
+            }
+        }
+
+        # Perform JCBB to find the best matches between the extracted features and landmarks
+        best_matches = self.jcbb_associate(z_t, self.map.get_landmarks(self.state), self.state, self.covariance)
+
+        # Iterate through the best matches found by JCBB
+        for obs, landmark_idx in best_matches:
+            observation_counter += 1
+            observation = {
+                "observation_id": observation_counter,
+                "landmarks": []
+            }
+
+            # Normalize the observation angle
+            obs = list(obs)
+            obs[1] = self.utils.normalize_angle(obs[1])
+            obs = tuple(obs)
+
+            # If no landmark is matched (new landmark case)
+            if landmark_idx is None:
+                rospy.loginfo(f"\n ADDING NEW LANDMARK at observation {observation_counter}")
+
+                # Initialize the new landmark position based on the observation
+                newLandmark_x, newLandmark_y = self.map.calculate_landmark_estimates(x, y, theta, obs)
+                new_landmark = np.array([newLandmark_x, newLandmark_y])
+
+                # Update state and covariance to include the new landmark
+                tempState = np.vstack((self.state, new_landmark.reshape(2, 1)))
+                n = self.covariance.shape[0]
+                tempCovariance = np.zeros((n + 2, n + 2))
+                tempCovariance[:n, :n] = self.covariance
+
+                # Initialize the landmark uncertainty
+                initial_landmark_uncertainty = (obs[0] ** 2) / 130
+                tempCovariance[n:, n:] = np.array([[initial_landmark_uncertainty, 0],
+                                                [0, initial_landmark_uncertainty]])
+
+                # Update the state and covariance
+                self.state = tempState
+                self.covariance = tempCovariance
+                self.num_landmarks += 1
+
+                # Store the new landmark data in the correction data structure
+                new_landmark_data = {
+                    "landmark_id": self.num_landmarks,
+                    "new_landmark_position": new_landmark.tolist(),
+                    "z_i": obs,
+                    "measurement_residual": [0, 0],  # No residual for new landmarks
+                }
+
+                correction_data["correction"]["newLandmarkData"]["landmarks"].append(new_landmark_data)
+
+            else:
+                # Perform EKF update for matched landmarks
+                z_hat, H_extended = self.compute_expected_observation_and_jacobian(self.state, landmark_idx, self.num_landmarks)
+                residual = obs - z_hat
+                residual[1] = self.utils.normalize_angle(residual[1])
+
+                Psi_k = H_extended @ self.covariance @ H_extended.T + self.measurement_noise
+                Kalman_gain = self.covariance @ H_extended.T @ np.linalg.inv(Psi_k)
+
+                # EKF State Update
+                self.state += Kalman_gain @ residual
+                self.state[2] = self.utils.normalize_angle(self.state[2])
+
+                # EKF Covariance Update
+                self.covariance = (np.eye(len(self.state)) - Kalman_gain @ H_extended) @ self.covariance
+
+                # Store matched observation details in the correction data structure
+                matched_observation = {
+                    "observation_id": observation_counter,
+                    "matched_landmark_index": landmark_idx + 1,
+                    "landmarks": [
+                        {
+                            "landmark_id": landmark_idx + 1,
+                            "z_i": obs,
+                            "z_hat": z_hat.tolist(),
+                            "measurement_residual": residual.tolist(),
+                            "Kalman_gain": Kalman_gain.tolist(),
+                        }
+                    ]
+                }
+
+                correction_data["correction"]["Matched"]["observations"].append(matched_observation)
+
+        # Final steps of the correction process
+        correction_data["correction"]["final_state"] = self.state.tolist()
+        correction_data["correction"]["final_covariance"] = self.covariance.tolist()
+
+        # Save correction data to JSON for analysis
+        self.utils.save_correction_data_to_json(correction_data)
+
+        rospy.loginfo("\n === JCBB CORRECTION FINISHED ====== JCBB CORRECTION FINISHED ======")
+
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f"\n JCBB Correction function took {elapsed_time:.6f} seconds.")
+
+        return self.state, self.covariance, self.num_landmarks
+
+    
+    def jcbb_associate(self, observations, landmarks, currentStateVector, currentCovarianceMatrix):
+
+        best_match = []
+        best_compatibility = float('inf')
+
+        def joint_compatibility_test(association, compatible_pairs):
+
+            total_compatibility = 0
+            for obs, idx in association:
+                if idx is not None:
+                    z_hat, H = self.compute_expected_observation_and_jacobian(currentStateVector, self.map.get_landmarks(idx), len(landmarks))
+                    residual = obs - z_hat
+                    residual[1] = self.utils.normalize_angle(residual[1])
+
+                    Psi_k = H @ currentCovarianceMatrix @ H.T + self.measurement_noise
+                    mahalanobis_distance = residual.T @ np.linalg.inv(Psi_k) @ residual
+
+                    if mahalanobis_distance > self.mahalanobis_threshold:
+                        return False  # Early rejection if any match is not compatible
+                    total_compatibility += mahalanobis_distance
+
+            return total_compatibility
+
+        def recursive_jcbb(association, unmatched_observations, unmatched_landmarks):
+            
+            nonlocal best_match, best_compatibility
+
+            if not unmatched_observations:
+                # Evaluate total compatibility of the current association set
+                total_compatibility = joint_compatibility_test(association, unmatched_landmarks)
+                if total_compatibility < best_compatibility:
+                    best_compatibility = total_compatibility
+                    best_match = association[:]
+                return
+
+            current_obs = unmatched_observations[0]
+            remaining_observations = unmatched_observations[1:]
+
+            for idx, landmark in enumerate(unmatched_landmarks):
+                z_hat, H = self.compute_expected_observation_and_jacobian(currentStateVector, self.map.get_landmarks(idx), len(landmarks))
+                residual = current_obs - z_hat
+                residual[1] = self.utils.normalize_angle(residual[1])
+
+                Psi_k = H @ currentCovarianceMatrix @ H.T + self.measurement_noise
+                mahalanobis_distance = residual.T @ np.linalg.inv(Psi_k) @ residual
+
+                if mahalanobis_distance < self.mahalanobis_threshold:  # Compatibility check
+                    new_association = association + [(current_obs, idx)]
+                    remaining_landmarks = unmatched_landmarks[:idx] + unmatched_landmarks[idx + 1:]
+
+                    recursive_jcbb(new_association, remaining_observations, remaining_landmarks)
+
+            # Consider the case where no landmark is matched (new landmark)
+            recursive_jcbb(association + [(current_obs, None)], remaining_observations, unmatched_landmarks)
+
+        # Initial call to the recursive function
+        recursive_jcbb([], observations, landmarks)
+
+        return best_match
+
+    def compute_expected_observation_and_jacobian(self, currentStateVector, landmark_index, num_landmarks):
+
+        # Extract the robot's current state
+        x = currentStateVector[0]
+        y = currentStateVector[1]
+        theta = currentStateVector[2]
+
+        # Extract the landmark's position from the state vector
+        x_l = currentStateVector[3 + 2 * landmark_index]
+        y_l = currentStateVector[3 + 2 * landmark_index + 1]
+
+        # Compute the differences in position between the robot and the landmark
+        delta_x = x_l - x
+        delta_y = y_l - y
+
+        # Compute the squared distance (q) between the robot and the landmark
+        q = delta_x**2 + delta_y**2
+
+        # Compute the expected observation (z_hat), which consists of:
+        # - The range (distance) to the landmark
+        # - The bearing (angle) to the landmark, relative to the robot’s orientation
+        range_to_landmark = np.sqrt(q)
+        bearing_to_landmark = np.arctan2(delta_y, delta_x) - theta
+        bearing_to_landmark = self.utils.normalize_angle(bearing_to_landmark)
+
+        # z_hat: Expected observation [range, bearing]
+        z_hat = np.array([range_to_landmark, bearing_to_landmark])
+
+        # Compute the Jacobian matrix H (2x5) for the current observation
+        sqrt_q = np.sqrt(q)
+
+        H = np.array([
+            [-delta_x / sqrt_q, -delta_y / sqrt_q, 0, delta_x / sqrt_q, delta_y / sqrt_q],     # Derivatives of range w.r.t [x, y, theta]
+            [delta_y / q,      -delta_x / q,      -1, -delta_y / q,      delta_x / q]      # Derivatives of bearing w.r.t [x, y, theta]
+        ])
+
+        # Construct the F_xk matrix to map the small H matrix to the full state
+        # The matrix F_xk is (5 x (3 + 2*num_landmarks)), where 3 is for the robot and 2*num_landmarks is for all landmarks
+        F_xk = np.zeros((5, 3 + 2 * num_landmarks))
+        F_xk[:3, :3] = np.eye(3)  # Mapping for robot state
+        F_xk[3:, 3 + 2 * landmark_index: 3 + 2 * landmark_index + 2] = np.eye(2)  # Mapping for landmark state
+
+        # Extend the Jacobian matrix to the full state using F_xk
+        H_extended = H @ F_xk
+
+        return z_hat, H_extended
+
 
 
 ' Multiple Kalman Gain Update '

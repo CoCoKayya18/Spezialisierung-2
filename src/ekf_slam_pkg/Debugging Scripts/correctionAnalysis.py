@@ -1,6 +1,7 @@
 import json
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.widgets import CheckButtons
 import os
 import shutil
 
@@ -42,7 +43,8 @@ def load_json_data(file_path):
 # Function to visualize state updates over time
 def plot_state_updates_per_correction(data, save_dir):
     state_updates = []
-    sum_of_updates = None  # Initialize to None, will set it to the size of state when available
+    sum_of_updates = None  # Initialize to None, will set it to the size of the state when available
+    max_state_length = 0  # Track the maximum state vector length
 
     for correction in data:
         matched_observations = correction['correction'].get('Matched', {}).get('observations', [])
@@ -53,20 +55,37 @@ def plot_state_updates_per_correction(data, save_dir):
 
             if state_update:
                 state_update = np.array(state_update).flatten()  # Convert to 1D array
-                state_updates.append(state_update)
-
+                current_state_length = len(state_update)
+                
+                # Update the max_state_length if the current state is longer
+                if current_state_length > max_state_length:
+                    # Pad all previous state updates to match the new max_state_length
+                    state_updates = [np.pad(su, (0, current_state_length - len(su)), 'constant') for su in state_updates]
+                    if sum_of_updates is not None:
+                        sum_of_updates = np.pad(sum_of_updates, (0, current_state_length - len(sum_of_updates)), 'constant')
+                    max_state_length = current_state_length
+                
                 # Initialize sum_of_updates if it hasn't been done yet
                 if sum_of_updates is None:
-                    sum_of_updates = np.zeros_like(state_update)
+                    sum_of_updates = np.zeros(current_state_length)
+
+                # Pad the state_update if it's smaller than the current max length
+                if current_state_length < max_state_length:
+                    state_update = np.pad(state_update, (0, max_state_length - current_state_length), 'constant')
+
+                # Append the state update to state_updates
+                state_updates.append(state_update)
                 
-                sum_of_updates += state_update  # Sum the state updates
+                # Add the state update to the sum_of_updates
+                sum_of_updates += state_update
         else:
             # Skip corrections with no state update (e.g., newly detected landmarks)
             continue
 
     # Check if state updates exist
     if state_updates:
-        state_updates = np.array(state_updates)
+        # Convert state_updates to a 2D array, all rows having the same length
+        state_updates = np.vstack(state_updates)
 
         # Plot each state update over time
         plt.figure(figsize=(10, 6))
@@ -87,10 +106,11 @@ def plot_state_updates_per_correction(data, save_dir):
         plt.savefig(os.path.join(save_dir, 'state_updates_per_correction.png'))
         plt.close()
 
-        # Print the sum of all updates for reference in console
+        # Print the sum of all updates for reference in the console
         print("Sum of all state updates:", sum_of_updates)
     else:
         print("No state updates available for plotting.")
+
 
 # Function to extract the robot's estimated path and save the plot
 def plot_robot_path(data, save_dir):
@@ -360,61 +380,63 @@ def plot_covariance_growth_log_scale(data, save_dir):
     plt.close()
 
 def plot_state_after_corrections(data, save_dir):
-    correction_steps = []
-    x_state = []
-    y_state = []
-    theta_state = []
-    landmark_1_x_state = []
-    landmark_1_y_state = []
+    plt.figure(figsize=(12, 8))  # Larger figure for better visibility
 
-    for correction in data:
-        correction_number = correction['correction']['number']
+    # Prepare lists to hold plotted elements for toggling visibility later
+    group_plots = []
+    labels = []
+
+    # Loop through each correction and group landmarks by correction
+    for idx, correction in enumerate(data):
+        final_state = np.array(correction['correction']['final_state'])
         
-        # Check if there is matched data in this correction
-        matched_observations = correction['correction'].get('Matched', {}).get('observations', [])
+        # Extract robot and landmark positions
+        robot_x = final_state[0]  # assuming robot's x is at index 0
+        robot_y = final_state[1]  # assuming robot's y is at index 1
+        theta = final_state[2]    # assuming robot's orientation is at index 2
         
-        if matched_observations:
-            final_state = correction['correction']['final_state']
-            correction_steps.append(correction_number)
-            # Append robot state (x, y, theta)
-            x_state.append(final_state[0][0])  # x
-            y_state.append(final_state[1][0])  # y
-            theta_state.append(final_state[2][0])  # theta
-            
-            # Append the first landmark state (x, y) if it exists
-            if len(final_state) > 3:
-                landmark_1_x_state.append(final_state[3][0])  # landmark_1_x
-                landmark_1_y_state.append(final_state[4][0])  # landmark_1_y
-            else:
-                # In case there's no landmark information
-                landmark_1_x_state.append(np.nan)  # No landmark, append NaN
-                landmark_1_y_state.append(np.nan)  # No landmark, append NaN
+        # Assuming landmarks start from index 3 and alternate between x and y positions
+        landmarks_x = final_state[3::2]
+        landmarks_y = final_state[4::2]
 
-    # Plotting each state variable
-    plt.figure(figsize=(10, 6))
-    
-    plt.plot(correction_steps, x_state, label='x (robot)', marker='o')
-    plt.plot(correction_steps, y_state, label='y (robot)', marker='o')
-    plt.plot(correction_steps, theta_state, label='theta (robot)', marker='o')
-    plt.plot(correction_steps, landmark_1_x_state, label='Landmark 1 x', marker='x')
-    plt.plot(correction_steps, landmark_1_y_state, label='Landmark 1 y', marker='x')
-    
-    # Adding the linear line: y = m * (x - 10) + 0, where m is the slope
-    m = 0.1  # Define the slope, you can change this value to adjust the slope
-    x_line = np.array(correction_steps)
-    y_line = m * (x_line - 12)  # Linear equation with intercept at (10, 0)
+        # Plot robot position
+        plt.scatter(robot_x, robot_y, label=f'Robot (Correction {idx})', marker='o', color='C0')
+        
+        # Plot landmarks as a group for each correction
+        landmark_group, = plt.plot(landmarks_x, landmarks_y, 'x', label=f'Landmarks (Correction {idx})', visible=True)
+        group_plots.append(landmark_group)
+        labels.append(f'Landmarks (Correction {idx})')
 
-    plt.plot(x_line, y_line, label='Linear Line (y = m(x-10))', linestyle='--', color='black')
-
-    plt.title('State After Each Correction (Matched Observations)')
-    plt.xlabel('Correction Step')
-    plt.ylabel('State Value')
+    # Add labels, title, grid, and legend
+    plt.title('State After Each Correction (Grouped Landmarks)', fontsize=14)
+    plt.xlabel('State Value X', fontsize=12)
+    plt.ylabel('State Value Y', fontsize=12)
     plt.grid(True)
-    plt.legend()
 
-    # Save the plot
-    plt.savefig(os.path.join(save_dir, 'state_after_each_correction.png'))
-    plt.close()
+    # Create checkboxes for toggling groups of landmarks (grouped by correction)
+    rax = plt.axes([0.82, 0.2, 0.15, 0.6])  # Adjust the position and size of the checkbox
+    check = CheckButtons(rax, labels, [True] * len(labels))
+
+    # Define callback for toggling visibility
+    def toggle_visibility(label):
+        index = labels.index(label)
+        plot_element = group_plots[index]
+        plot_element.set_visible(not plot_element.get_visible())
+        plt.draw()
+
+    # Connect the checkbox to the visibility toggle function
+    check.on_clicked(toggle_visibility)
+
+    # Adjust layout to make room for checkboxes
+    plt.subplots_adjust(left=0.1, right=0.75)  # Adjust margins to fit the checkbox
+
+    # Show plot with interactivity
+    # plt.show()
+
+    # Optionally save the plot if a save directory is provided
+    if save_dir:
+        plt.savefig(os.path.join(save_dir, 'grouped_landmarks_states.png'))
+        plt.close()
 
 def plot_pi_values(data, save_dir):
     # List to hold pi values for all observations
