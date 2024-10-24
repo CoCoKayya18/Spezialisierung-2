@@ -39,10 +39,26 @@ def move_robot():
     # Give time for the connection to establish
     rospy.sleep(2)
 
-    # Drive in a square pattern (adjust timings for your robot)
-    for _ in range(4):
-        drive_forward(duration=10, speed=0.5)   # Drive forward for 2 seconds
-        # rotate_robot(duration=1, angular_speed=0.5)  # Rotate 90 degrees (adjust timing for exact angle)
+    # 1. Move forward toward the first line (for 4 seconds)
+    drive_forward(duration=4, speed=0.4)
+    
+    # 2. Rotate to avoid first detected circle
+    rotate_robot(duration=1.5, angular_speed=0.6)
+    
+    # 3. Move forward to bypass the first detected line and circle
+    drive_forward(duration=3, speed=0.4)
+    
+    # 4. Rotate again to follow along the path without intersecting lines
+    rotate_robot(duration=1.2, angular_speed=-0.6)
+    
+    # 5. Move forward to avoid second detected circle and line intersection
+    drive_forward(duration=5, speed=0.5)
+    
+    # 6. Rotate to align towards the top right part of the map
+    rotate_robot(duration=1.5, angular_speed=-0.5)
+    
+    # 7. Final forward move to the top right corner
+    drive_forward(duration=6, speed=0.5)
 
     # Stop the robot before exiting
     stop_robot()

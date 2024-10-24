@@ -11,6 +11,7 @@ from math import sqrt
 import threading
 import csv
 import tf
+import cProfile
 
 class Robot:
     def __init__(self, config, ekf_slam, utils):
@@ -65,7 +66,10 @@ class Robot:
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/laserScan_Plots")
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/FeatureExtraction")
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/RansacLinesInIteration")
+        self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/Circle_Classification")
+        self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/RansacCircleIteration")
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data")
+
 
         # Initialize CSV files with headers
         self.utils.initialize_csv_files(ground_truth_csv_path, ekf_path_csv_path, odom_velocities_csv_path)
@@ -86,9 +90,9 @@ class Robot:
             
             self.publish_transform()
             
-            rospy.loginfo(f"\n State Vector after Prediction:\n{self.state}")
+            # rospy.loginfo(f"\n State Vector after Prediction:\n{self.state}")
 
-            rospy.loginfo(f"\n Covariance Matrix after Prediction:\n{self.covariance}")
+            # rospy.loginfo(f"\n Covariance Matrix after Prediction:\n{self.covariance}")
 
             self.publish_EKF_path(self.state, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
 
@@ -96,6 +100,9 @@ class Robot:
             # self.utils.save_odom_velocities_to_csv(msg)
 
     def scan_callback(self, msg):
+        
+        profiler = cProfile.Profile()
+        profiler.enable()
         
         transformed_scan = msg
         
@@ -109,8 +116,9 @@ class Robot:
 
             self.scan_message = transformed_scan
         
-            ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
-
+            # ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
+            ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct_with_jcbb(self.scan_message, self.state, self.covariance)
+            
             self.state = ekf_corrected_pose
             self.covariance = ekf_corrected_covariance
             self.num_landmarks = num_landmarks
@@ -120,7 +128,9 @@ class Robot:
             self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
 
             self.publish_EKF_path(self.state, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
-            
+        
+        profiler.disable()
+        profiler.dump_stats('/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/profiler_output_correction.prof')
 
     def ground_truth_callback(self, msg):
         self.ground_truth_path.append(msg.pose.pose)
