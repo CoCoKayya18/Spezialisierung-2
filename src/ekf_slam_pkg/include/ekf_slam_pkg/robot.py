@@ -116,8 +116,8 @@ class Robot:
 
             self.scan_message = transformed_scan
         
-            # ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
-            ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct_with_jcbb(self.scan_message, self.state, self.covariance)
+            ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct(self.scan_message, self.state, self.covariance)
+            # ekf_corrected_pose, ekf_corrected_covariance, num_landmarks = self.ekf_slam.correct_with_jcbb(self.scan_message, self.state, self.covariance)
             
             self.state = ekf_corrected_pose
             self.covariance = ekf_corrected_covariance

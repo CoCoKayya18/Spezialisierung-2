@@ -200,11 +200,11 @@ class EKFSLAM:
             tempCovariance = np.zeros((n + 2, n + 2))
             tempCovariance[:n, :n] = self.covariance
             # Initialize landmark uncertainty proportional to the range measurement
-            initial_landmark_uncertainty = (z_i[0] ** 2) / 130
+            # initial_landmark_uncertainty = (z_i[0] ** 2) / 130
             
             # initial_landmark_uncertainty = 5
 
-            # initial_landmark_uncertainty = 10
+            initial_landmark_uncertainty = 1000
 
             tempCovariance[n:, n:] = np.array([[initial_landmark_uncertainty, 0],
                                             [0, initial_landmark_uncertainty]])
