@@ -298,4 +298,20 @@ class Utils:
     # def plot_async(self, target_func, *args, **kwargs):
     #     # Use threading to call the target plotting function asynchronously
     #     threading.Thread(target=target_func, args=args, kwargs=kwargs).start()
+    
+    def clear_json_file(self, file_path):
+        # Check if the file exists
+        if not os.path.exists(file_path):
+            print(f"The file at {file_path} does not exist.")
+            return
+
+        try:
+            # Open the file and overwrite it with an empty JSON object (or array, if needed)
+            with open(file_path, 'w') as json_file:
+                # Writing an empty JSON object (you can change to [] for an empty list if needed)
+                json.dump({}, json_file)
+            print(f"Content of the JSON file at {file_path} has been cleared.")
+            
+        except Exception as e:
+            print(f"An error occurred while clearing the file: {e}")
 

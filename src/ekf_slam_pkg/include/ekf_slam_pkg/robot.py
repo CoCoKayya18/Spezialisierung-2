@@ -54,6 +54,8 @@ class Robot:
         ground_truth_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ground_truth_path.csv'
         ekf_path_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ekf_path.csv'
         odom_velocities_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/odom_veloc ities.csv'
+        
+        self.utils.clear_json_file("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/correctionData.json")
 
         # Clear the plot directories
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/Covariance_Plots")

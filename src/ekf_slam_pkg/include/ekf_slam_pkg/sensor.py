@@ -23,8 +23,99 @@ class Sensor:
         self.points = None
         
         pass
+    
+    def extract_features_only_DBSCAN(self, scan_data, angle_min, angle_max, angle_increment, counter, eps=0.1, min_samples=5):
+        # Extracts features from LiDAR scan data using DBSCAN clustering
 
-    def extract_features_from_scan(self, scan_data, angle_min, angle_max, angle_increment, counter, eps=0.15, min_samples=5):
+        # Extract ranges from the LaserScan message
+        ranges = np.array(scan_data.ranges)
+
+        # Convert polar coordinates (range and angle) to Cartesian coordinates (x, y)
+        angles = angle_min + np.arange(len(ranges)) * angle_increment
+        x_coords = ranges * np.cos(angles)
+        y_coords = ranges * np.sin(angles)
+
+        # Stack x and y coordinates into a single array
+        points = np.vstack((x_coords, y_coords)).T
+
+        # Remove points with invalid ranges (e.g., 0 or inf values)
+        valid_points = points[np.isfinite(points).all(axis=1)]
+
+        if valid_points.size == 0:
+            rospy.loginfo("No valid points found in the scan data.")
+            return []
+
+        # Apply DBSCAN clustering algorithm
+        db = DBSCAN(eps=eps, min_samples=min_samples).fit(valid_points)
+        labels = db.labels_
+
+        # Dictionary to store clusters and their centroids
+        cluster_dict = {}
+        polar_centroid_list = []
+        cartesian_centroid_list = []
+        
+        # Get the set of unique labels (each unique cluster has a unique label, -1 is noise)
+        unique_labels = set(labels)
+        
+        # Plotting setup
+        # plt.figure()
+        # colormap = plt.cm.get_cmap('tab10', len(unique_labels))
+        
+        iteration = 0
+        
+        for label in unique_labels:
+            if label == -1:
+                continue  # Skip noise points
+            
+            iteration += 1
+
+            # Extract points belonging to the current cluster
+            cluster_points = valid_points[labels == label]
+            
+            # Save cluster points in a dictionary
+            cluster_dict[label] = cluster_points
+            
+            # Calculate the centroid of the cluster (mean of the x and y coordinates)
+            centroid_x, centroid_y = np.mean(cluster_points, axis=0)
+
+            # Convert the centroid from Cartesian to polar coordinates
+            range_centroid = np.sqrt(centroid_x**2 + centroid_y**2)
+            angle_centroid = np.arctan2(centroid_y, centroid_x)
+            
+            # Store the polar coordinates of the centroid
+            polar_centroid_list.append((range_centroid, angle_centroid))
+            
+            cartesian_centroid_list.append((centroid_x, centroid_y))
+            
+            # # Plot the cluster points with a unique color
+            # plt.scatter(cluster_points[:, 0], cluster_points[:, 1], color=colormap(label), marker='o', label=f'Cluster {label} Points')
+            
+            # # Plot the centroid in the same color but with a larger, distinct marker
+            # plt.scatter(centroid_x, centroid_y, marker='x', color=colormap(label), s=200, edgecolor='black', label=f'Cluster {label} Centroid')
+
+            # # Optionally: You could also log or visualize the centroid for debugging
+            rospy.loginfo(f"Cluster {label} centroid (polar): range={range_centroid}, angle={angle_centroid}")
+        
+        # # Plot setup
+        # plt.xlabel('X Coordinates')
+        # plt.ylabel('Y Coordinates')
+        # plt.title(f'DBSCAN Clustering and Centroid Visualization Correction {counter} iteration {iteration}')
+        # plt.legend(loc='upper right')
+        # plt.grid(True)
+        
+        # save_dir = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/DBSCAN_Plots'
+
+        # # Show the plot
+        # filename = f'detected_features_loop_{counter}_iteration_{iteration}.png'
+        # filepath = os.path.join(save_dir, filename)
+        # plt.savefig(filepath)
+        # plt.close()
+        
+        # Return the list of centroids in polar coordinates
+        return polar_centroid_list
+
+
+    def extract_features_from_scan(self, scan_data, angle_min, angle_max, angle_increment, counter, eps=0.05, min_samples=5):
             # Extracts features from LiDAR scan data using DBSCAN clustering
 
             # Extract ranges from the LaserScan message
@@ -115,7 +206,7 @@ class Sensor:
                     # Append as (r, phi, radius)
                     features.append(polar_circle_center)
 
-            # self.visualize_features(valid_points, labels, line_features, corner_features, circle_feature, counter)
+            self.visualize_features(valid_points, labels, line_features, corner_features, circle_feature, counter)
 
             # rospy.loginfo(f"\n Following features detected: {features}")
             
@@ -146,17 +237,13 @@ class Sensor:
         else:
             isCircle = False
         
-        # self.visualize_circle_classification(cluster_points, radius_variance, angular_spread, mean_x, mean_y, isCircle, loopCounter, iteration, variance_threshold, min_inliers, angular_threshold)
+        self.visualize_circle_classification(cluster_points, radius_variance, angular_spread, mean_x, mean_y, isCircle, loopCounter, iteration, variance_threshold, min_inliers, angular_threshold)
         
         # Classify as a circle based on the variance of radii and angular spread
         return radius_variance < variance_threshold and len(cluster_points) >= min_inliers and angular_spread > angular_threshold
 
     def visualize_features(self, valid_points, labels, line_features, corner_features, circle_features, loopCounter):
         save_dir = "/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/FeatureExtraction"
-        
-        # rospy.loginfo(f"Line features: {line_features}")
-        # rospy.loginfo(f"Corner features: {corner_features}")
-        # rospy.loginfo(f"Circle features: {circle_features}")
         
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)

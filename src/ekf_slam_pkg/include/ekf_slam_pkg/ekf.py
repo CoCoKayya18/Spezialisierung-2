@@ -20,7 +20,7 @@ class EKFSLAM:
         self.covariance = np.eye(3)
         self.num_landmarks = 0 
         self.state = np.eye(3)
-        self.alpha = 0.2
+        self.alpha = 50
 
         self.F_x = np.eye(3)
         
@@ -81,7 +81,7 @@ class EKFSLAM:
 
         self.state[2] = self.utils.normalize_angle(self.state[2])
 
-        self.covariance += F_x.T @ predicted_covariance @ F_x + F_x.T @ self.process_noise @ F_x
+        self.covariance += F_x.T @ predicted_covariance/5 @ F_x + F_x.T @ self.process_noise @ F_x
 
         return self.state, self.covariance
 
@@ -100,9 +100,9 @@ class EKFSLAM:
         theta = self.state[2].item()
 
         # Feature Extraction Step
-        z_t = self.sensor.extract_features_from_scan(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment, self.correctionCounter)
+        # z_t = self.sensor.extract_features_from_scan(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment, self.correctionCounter)
 
-        # z_t = self.sensor.detect_corners_and_circles_ransac(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment, self.correctionCounter)
+        z_t = self.sensor.extract_features_only_DBSCAN(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment, self.correctionCounter)
 
         # Start observation loop
 
@@ -204,7 +204,7 @@ class EKFSLAM:
             
             # initial_landmark_uncertainty = 5
 
-            initial_landmark_uncertainty = 1000
+            initial_landmark_uncertainty = 0.01
 
             tempCovariance[n:, n:] = np.array([[initial_landmark_uncertainty, 0],
                                             [0, initial_landmark_uncertainty]])

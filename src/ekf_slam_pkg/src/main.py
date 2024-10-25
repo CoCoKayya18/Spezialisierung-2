@@ -57,34 +57,36 @@ def main_loop():
         rate.sleep()
 
 def main():
-    # Use cProfile to profile the main_loop
-    profiler = cProfile.Profile()
-    profiler.enable()  # Start profiling
+    # # Use cProfile to profile the main_loop
+    # profiler = cProfile.Profile()
+    # profiler.enable()  # Start profiling
 
-    try:
-        main_loop()  # Call the main loop
-    finally:
+    # try:
+    #     main_loop()  # Call the main loop
+    # finally:
         
-        rospy.loginfo("Saving profiling data...")
+    #     rospy.loginfo("Saving profiling data...")
         
-        profiler.disable()  # Stop profiling
+    #     profiler.disable()  # Stop profiling
 
-        # Save the profiling data to a .prof file for Snakeviz
-        profiler_output_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/profiler_output_main.prof'
-        profiler.dump_stats(profiler_output_path)
+    #     # Save the profiling data to a .prof file for Snakeviz
+    #     profiler_output_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/profiler_output_main.prof'
+    #     profiler.dump_stats(profiler_output_path)
 
-        # Optionally, print some profiling statistics to stdout
-        stats = pstats.Stats(profiler, stream=sys.stdout)
-        stats.strip_dirs()
-        stats.sort_stats('cumtime')
-        stats.print_stats(20)  # Print the top 20 functions
+    #     # Optionally, print some profiling statistics to stdout
+    #     stats = pstats.Stats(profiler, stream=sys.stdout)
+    #     stats.strip_dirs()
+    #     stats.sort_stats('cumtime')
+    #     stats.print_stats(20)  # Print the top 20 functions
 
-        # Also, save the stats to a text file for further inspection
-        with open('/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/profiler_output_main.txt', 'w') as f:
-            stats = pstats.Stats(profiler, stream=f)
-            stats.strip_dirs()
-            stats.sort_stats('cumtime')
-            stats.print_stats(20)
+    #     # Also, save the stats to a text file for further inspection
+    #     with open('/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/profiler_output_main.txt', 'w') as f:
+    #         stats = pstats.Stats(profiler, stream=f)
+    #         stats.strip_dirs()
+    #         stats.sort_stats('cumtime')
+    #         stats.print_stats(20)
+    
+    main_loop()
 
 
 if __name__ == '__main__':
