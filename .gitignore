@@ -1,3 +1,4 @@
 .vscode
 **/build/
 **/devel/
+/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/correction_data.json
