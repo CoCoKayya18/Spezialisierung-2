@@ -9,7 +9,7 @@ def move_robot():
     rospy.init_node('robot_driver', anonymous=True)
     
     # Create a publisher for the /cmd_vel topic
-    cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
+    cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=100)
     
     # Define the Twist message for movement
     move_cmd = Twist()
@@ -37,10 +37,10 @@ def move_robot():
         cmd_vel_pub.publish(move_cmd)
     
     # Give time for the connection to establish
-    rospy.sleep(2)
+    rospy.sleep(5)
 
-    # 1. Move forward toward the first line (for 4 seconds)
-    drive_forward(duration=4, speed=0.4)
+    # 1. Move forward toward the first line (for 8 seconds)
+    drive_forward(duration=8, speed=0.4)
     
     # 2. Rotate to avoid first detected circle
     rotate_robot(duration=1.5, angular_speed=0.6)
@@ -55,13 +55,19 @@ def move_robot():
     drive_forward(duration=5, speed=0.5)
     
     # 6. Rotate to align towards the top right part of the map
-    rotate_robot(duration=1.5, angular_speed=-0.5)
+    rotate_robot(duration=1.5, angular_speed=-0.8)
     
-    # 7. Final forward move to the top right corner
+    # 7. Move forward to reach the top right corner
     drive_forward(duration=6, speed=0.5)
+    
+    # 8. Rotate to the right
+    rotate_robot(duration=5, angular_speed=0.6)
 
     # Stop the robot before exiting
     stop_robot()
+    
+    rospy.loginfo("Movement sequence complete. Keeping the node alive.")
+    rospy.spin()
 
 if __name__ == '__main__':
     try:

@@ -11,12 +11,13 @@ from math import sqrt
 import threading
 import csv
 import tf
+import time
 import cProfile
 
 class Robot:
     def __init__(self, config, ekf_slam, utils):
 
-        self.covariance = np.eye(3)
+        self.covariance = np.zeros((3, 3))
         self.num_landmarks = 0 
         self.state = np.array([[config['initial_position']['x']], 
                                [config['initial_position']['y']], 
@@ -72,6 +73,8 @@ class Robot:
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/RansacCircleIteration")
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data")
 
+        self.last_predict_time = time.time()
+        self.last_correct_time = time.time()
 
         # Initialize CSV files with headers
         self.utils.initialize_csv_files(ground_truth_csv_path, ekf_path_csv_path, odom_velocities_csv_path)
@@ -83,6 +86,15 @@ class Robot:
         # self.current_pose = self.state
         
         with self.lock:
+            
+            current_time = time.time()
+            predict_interval = current_time - self.last_predict_time
+            predict_frequency = 1.0 / predict_interval if predict_interval > 0 else 0
+            self.last_predict_time = current_time
+            
+            # rospy.loginfo(f"Prediction frequency: {predict_frequency:.2f}")
+            
+            start_execution_time = time.time()
         
             self.current_vel = self.utils.transform_odometry_to_world(msg)
             ekf_predicted_pose, ekf_predicted_covariance = self.ekf_slam.predict(self.current_vel, self.state, self.covariance, self.num_landmarks)  # Run the EKF prediction
@@ -90,21 +102,26 @@ class Robot:
             self.state = ekf_predicted_pose
             self.covariance = ekf_predicted_covariance
             
-            self.publish_transform()
-            
-            # rospy.loginfo(f"\n State Vector after Prediction:\n{self.state}")
-
-            # rospy.loginfo(f"\n Covariance Matrix after Prediction:\n{self.covariance}")
+            # self.publish_transform()
 
             self.publish_EKF_path(self.state, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
+            
+            end_execution_time = time.time()
+            # rospy.loginfo(f"odom_callback runtime: {end_execution_time - start_execution_time:.4f} seconds")
+            
+            end_interval = end_execution_time - self.last_predict_time
+            execution_frequency = 1.0 / end_interval if end_interval > 0 else 0
+            self.last_predict_time = end_execution_time
 
+            # rospy.loginfo(f"odom_callback execution frequency: {execution_frequency:.2f} Hz")
+            
             # Save odom velocities to CSV
             # self.utils.save_odom_velocities_to_csv(msg)
 
     def scan_callback(self, msg):
         
-        profiler = cProfile.Profile()
-        profiler.enable()
+        # profiler = cProfile.Profile()
+        # profiler.enable()
         
         transformed_scan = msg
         
@@ -113,8 +130,19 @@ class Robot:
         
         self.correctionCounter += 1
         
-
         with self.lock:
+            
+            # Calculate the interval since the last callback activation
+            current_time = time.time()
+            interval = current_time - self.last_correct_time
+            self.last_correct_time = current_time
+            callback_frequency = 1.0 / interval if interval > 0 else 0
+
+            # Log the frequency at which scan_callback is being triggered
+            # rospy.loginfo(f"scan_callback trigger frequency: {callback_frequency:.2f} Hz")
+
+            # Start timing for this callback execution (optional, if you also want execution time)
+            start_execution_time = time.time()
 
             self.scan_message = transformed_scan
         
@@ -125,14 +153,23 @@ class Robot:
             self.covariance = ekf_corrected_covariance
             self.num_landmarks = num_landmarks
 
-            self.publish_transform()
+            # self.publish_transform()
         
             self.publish_map(self.ekf_slam.map.get_landmarks(self.state))
 
             self.publish_EKF_path(self.state, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
-        
-        profiler.disable()
-        profiler.dump_stats('/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/profiler_output_correction.prof')
+            
+            end_execution_time = time.time()
+            # rospy.loginfo(f"scan_callback runtime: {end_execution_time - start_execution_time:.4f} seconds")
+            
+            end_interval = end_execution_time - self.last_correct_time
+            execution_frequency = 1.0 / end_interval if end_interval > 0 else 0
+            self.last_correct_time = end_execution_time
+
+            # rospy.loginfo(f"scan_callback execution frequency: {execution_frequency:.2f} Hz")
+
+        # profiler.disable()
+        # profiler.dump_stats('/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/profiler_output_correction.prof')
 
     def ground_truth_callback(self, msg):
         self.ground_truth_path.append(msg.pose.pose)

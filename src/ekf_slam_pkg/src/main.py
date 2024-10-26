@@ -37,7 +37,7 @@ def main_loop():
     ekf_slam.robot = robot  # Set the robot reference after initialization
 
     # Initialize timing for frequency monitoring
-    loop_rate = 30  # Desired frequency in Hz
+    loop_rate = 5  # Desired frequency in Hz
     rate = rospy.Rate(loop_rate)
     last_time = time.time()
 
@@ -54,7 +54,7 @@ def main_loop():
         # rospy.loginfo(f"Current loop frequency: {frequency:.2f} Hz")
 
         # Sleep to maintain loop rate of 30 Hz
-        rate.sleep()
+        # rate.sleep()
 
 def main():
     # # Use cProfile to profile the main_loop

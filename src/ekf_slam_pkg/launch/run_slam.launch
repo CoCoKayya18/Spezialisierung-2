@@ -46,29 +46,15 @@
   </node> -->
 
   <!-- Gmapping -->
-  <!-- <node pkg="gmapping" type="slam_gmapping" name="turtlebot3_slam_gmapping"> 
+  <node pkg="gmapping" type="slam_gmapping" name="turtlebot3_slam_gmapping"> 
     <param name="base_frame" value="$(arg set_base_frame)"/>
     <param name="odom_frame" value="$(arg set_odom_frame)"/>
     <param name="map_frame"  value="$(arg set_map_frame)"/>
     <rosparam command="load" file="$(find turtlebot3_slam)/config/gmapping_params.yaml" />
-  </node> -->
-
-
-  <node type="rviz" name="rviz" pkg="rviz" args="-d $(find ekf_slam_pkg)/rviz/rviz_config.rviz"/>
-
-  <!-- <arg name="node_start_delay" default="1.0" /> -->
-
-  <node name="main" pkg="ekf_slam_pkg" type="main.py" output="screen" required="true"> </node>
-  <node name="MoveRobot" pkg="ekf_slam_pkg" type="moveRobotWithVel.py" output="screen" required="true"> </node>
-  <!-- <node name="SendGoal" pkg="ekf_slam_pkg" type="SendGoal.py" output="screen"> </node> -->
-
-  <!-- <node pkg="ekf_slam_pkg" type="correctionAnalysis.py" name="analysis_script" args="/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/Debugging Scripts/correctionAnalysis.py" launch-prefix="bash -c" respawn="false" /> -->
-
-</launch>
-
+  </node>
 
   <!-- Move-Base -->
-  <!-- <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="log"> output="screen"
+  <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="log"> output="screen"
     <param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS" />
     <rosparam file="$(find turtlebot3_navigation)/param/costmap_common_params_$(arg model).yaml" command="load" ns="global_costmap" />
     <rosparam file="$(find turtlebot3_navigation)/param/costmap_common_params_$(arg model).yaml" command="load" ns="local_costmap" />
@@ -79,4 +65,21 @@
     <remap from="cmd_vel" to="$(arg cmd_vel_topic)"/>
     <remap from="odom" to="$(arg odom_topic)"/>
     <param name="DWAPlannerROS/min_vel_x" value="0.0" if="$(arg move_forward_only)"/>
-  </node> -->
+  </node>
+
+
+
+  <node type="rviz" name="rviz" pkg="rviz" args="-d $(find ekf_slam_pkg)/rviz/rviz_config.rviz"/>
+
+  <!-- <arg name="node_start_delay" default="1.0" /> -->
+
+  <node name="main" pkg="ekf_slam_pkg" type="main.py" output="screen" required="true"> </node>
+  <node name="GetJsonData" pkg="ekf_slam_pkg" type="jsonMessageSubscriber.py" output="screen"> </node>
+  <!-- <node name="MoveRobot" pkg="ekf_slam_pkg" type="moveRobotWithVel.py" output="screen" required="true"> </node> -->
+  <!-- <node name="SendGoal" pkg="ekf_slam_pkg" type="SendGoal.py" output="screen"> </node> -->
+
+
+  <!-- <node pkg="ekf_slam_pkg" type="correctionAnalysis.py" name="analysis_script" args="/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/Debugging Scripts/correctionAnalysis.py" launch-prefix="bash -c" respawn="false" /> -->
+
+</launch>
+

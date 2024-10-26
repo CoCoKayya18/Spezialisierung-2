@@ -12,6 +12,7 @@ import glob
 import os
 import json
 import tf 
+from std_msgs.msg import String
 import threading
 
 class Utils:
@@ -26,6 +27,8 @@ class Utils:
         self.correctionJsonPath = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/correctionData.json'
 
         self.listener = tf.TransformListener()
+        
+        self.correction_data_pub = rospy.Publisher('/correction_data', String, queue_size=100)
 
     def update_pose_from_state(self, pose, x, y, theta):
         # Helper function to update the robot's pose from state vector
@@ -254,6 +257,17 @@ class Utils:
         # Write the updated data back to the file
         with open(self.correctionJsonPath, 'w') as json_file:
             json.dump(existing_data, json_file, indent=4)
+    
+    def publish_correction_data(self, correction_data):
+        
+        json_data_str = json.dumps(correction_data)
+    
+        # Create the ROS message
+        msg = String()
+        msg.data = json_data_str
+        
+        # Publish the message
+        self.correction_data_pub.publish(msg)
             
     def visualize_and_save_laserscan(self, scan_msg, counter):
 

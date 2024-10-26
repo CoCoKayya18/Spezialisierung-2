@@ -24,7 +24,7 @@ class Sensor:
         
         pass
     
-    def extract_features_only_DBSCAN(self, scan_data, angle_min, angle_max, angle_increment, counter, eps=0.1, min_samples=5):
+    def extract_features_only_DBSCAN(self, scan_data, angle_min, angle_max, angle_increment, counter, eps=0.15, min_samples=5):
         # Extracts features from LiDAR scan data using DBSCAN clustering
 
         # Extract ranges from the LaserScan message
@@ -94,7 +94,7 @@ class Sensor:
             # plt.scatter(centroid_x, centroid_y, marker='x', color=colormap(label), s=200, edgecolor='black', label=f'Cluster {label} Centroid')
 
             # # Optionally: You could also log or visualize the centroid for debugging
-            rospy.loginfo(f"Cluster {label} centroid (polar): range={range_centroid}, angle={angle_centroid}")
+            # rospy.loginfo(f"Cluster {label} centroid (polar): range={range_centroid}, angle={angle_centroid}")
         
         # # Plot setup
         # plt.xlabel('X Coordinates')
@@ -206,7 +206,7 @@ class Sensor:
                     # Append as (r, phi, radius)
                     features.append(polar_circle_center)
 
-            self.visualize_features(valid_points, labels, line_features, corner_features, circle_feature, counter)
+            # self.visualize_features(valid_points, labels, line_features, corner_features, circle_feature, counter)
 
             # rospy.loginfo(f"\n Following features detected: {features}")
             
@@ -237,7 +237,7 @@ class Sensor:
         else:
             isCircle = False
         
-        self.visualize_circle_classification(cluster_points, radius_variance, angular_spread, mean_x, mean_y, isCircle, loopCounter, iteration, variance_threshold, min_inliers, angular_threshold)
+        # self.visualize_circle_classification(cluster_points, radius_variance, angular_spread, mean_x, mean_y, isCircle, loopCounter, iteration, variance_threshold, min_inliers, angular_threshold)
         
         # Classify as a circle based on the variance of radii and angular spread
         return radius_variance < variance_threshold and len(cluster_points) >= min_inliers and angular_spread > angular_threshold

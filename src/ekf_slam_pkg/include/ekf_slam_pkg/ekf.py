@@ -17,10 +17,10 @@ class EKFSLAM:
         self.config = config
         self.utils = utils
 
-        self.covariance = np.eye(3)
+        self.covariance = np.zeros((3, 3))
         self.num_landmarks = 0 
         self.state = np.eye(3)
-        self.alpha = 50
+        self.alpha = 5
 
         self.F_x = np.eye(3)
         
@@ -69,28 +69,27 @@ class EKFSLAM:
         ' Resize the F_x matrix to adjust for the landmarks too'
         state_vector_size = 3 + 2 * self.num_landmarks
         F_x = np.zeros((3, state_vector_size))
-
+        
         # The top-left 3x3 block is the identity matrix that updates the robot's pose
         F_x[0, 0] = 1  # x -> x
         F_x[1, 1] = 1  # y -> y
         F_x[2, 2] = 1
-
+        
         predictedDelta = np.array(predictedDelta).reshape(-1, 1)
 
         self.state += F_x.T @ predictedDelta
 
         self.state[2] = self.utils.normalize_angle(self.state[2])
 
-        self.covariance += F_x.T @ predicted_covariance/5 @ F_x + F_x.T @ self.process_noise @ F_x
+        self.covariance += F_x.T @ predicted_covariance @ F_x + F_x.T @ self.process_noise @ F_x
 
         return self.state, self.covariance
 
-
     def correct(self, scanMessage, currentStateVector, currentCovarianceMatrix):
 
-        rospy.loginfo("\n === CORRECTION BEGINNING ====== CORRECTION BEGINNING ======")
+        # rospy.loginfo("\n === CORRECTION BEGINNING ====== CORRECTION BEGINNING ======")
 
-        start_time = time.time()
+        # start_time = time.time()
 
         self.state = currentStateVector
         self.covariance = currentCovarianceMatrix
@@ -185,7 +184,7 @@ class EKFSLAM:
             # Normalize z_i
             z_i = list(z_i)  # Convert the tuple to a list
             z_i[1] = self.utils.normalize_angle(z_i[1])  # Modify the angle
-            z_i = tuple(z_i)  # Convert it back to a tuple if necessary
+            z_i = tuple(z_i)  # Convert it back to a tuple 
                         
             # initialize new landmark and create tempoprary state and covariance matrices
             newLandmark_x, newLandmark_y = self.map.calculate_landmark_estimates(x, y, theta, z_i)
@@ -204,7 +203,7 @@ class EKFSLAM:
             
             # initial_landmark_uncertainty = 5
 
-            initial_landmark_uncertainty = 0.01
+            initial_landmark_uncertainty = 0.1
 
             tempCovariance[n:, n:] = np.array([[initial_landmark_uncertainty, 0],
                                             [0, initial_landmark_uncertainty]])
@@ -244,10 +243,10 @@ class EKFSLAM:
                 
                 # rospy.loginfo(f"Psi matrix: {Psi_k}")
                 
-                eigenvalues, _ = np.linalg.eig(Psi_k)
+                # eigenvalues, _ = np.linalg.eig(Psi_k)
 
-                if np.any(eigenvalues <= 0):
-                    rospy.logwarn(f"Warning: Negative or zero eigenvalues detected in Psi_k: {Psi_k}")
+                # if np.any(eigenvalues <= 0):
+                #     rospy.logwarn(f"Warning: Negative or zero eigenvalues detected in Psi_k: {Psi_k}")
 
                 measurement_residual_k = z_i - z_hat_k
 
@@ -289,7 +288,7 @@ class EKFSLAM:
             # Check if a new landmark is being added
             if best_landmark_index >= self.num_landmarks:
 
-                rospy.loginfo(f"\n ADDING NEW LANDMARK at obs {observation_counter}, landmark {landmark_counter}")
+                # rospy.loginfo(f"\n ADDING NEW LANDMARK at obs {observation_counter}, landmark {landmark_counter}")
 
                 # Update state vector to include the new landmark
                 self.state = tempState
@@ -299,6 +298,7 @@ class EKFSLAM:
                 self.num_landmarks = temp_num_landmarks
                 
                 measurement_residual_forJson = z_i - z_hat_list[best_landmark_index]
+                measurement_residual_forJson[1] = self.utils.normalize_angle(measurement_residual_forJson[1])
                 
                 # Add the new landmark to the "newLandmarkData" section
                 new_landmark_data = {
@@ -325,8 +325,8 @@ class EKFSLAM:
                 temp_num_landmarks -= 1
             
                 # Add both variables to the list for later
-                best_H_Matrix_list.append(best_H_matrix)
-                best_z_hat_list.append(best_z_hat)
+                # best_H_Matrix_list.append(best_H_matrix)
+                # best_z_hat_list.append(best_z_hat)
                 
                 
                 # best_pi_list.append(pi_list[best_landmark_index])
@@ -342,6 +342,7 @@ class EKFSLAM:
                 ' Incremental updating '
                 
                 measurement_residual = z_i - best_z_hat
+                measurement_residual[1] = self.utils.normalize_angle(measurement_residual[1])
                 
                 state_update = Kalman_gain @ measurement_residual
                 state_update = state_update.reshape((state_update.shape[0], 1))
@@ -352,10 +353,10 @@ class EKFSLAM:
                 self.state[2] = self.utils.normalize_angle(self.state[2])  # Normalize the orientation angle
                 self.covariance = (np.eye(covariance_update.shape[0]) - covariance_update) @ self.covariance
                 
-                eigenvalues, _ = np.linalg.eig(self.covariance)
+                # eigenvalues, _ = np.linalg.eig(self.covariance)
 
-                if np.any(eigenvalues <= 0):
-                    rospy.logwarn(f"Warning: Negative or zero eigenvalues detected in self.covariance before applying final covariance update: {self.covariance}")
+                # if np.any(eigenvalues <= 0):
+                #     rospy.logwarn(f"Warning: Negative or zero eigenvalues detected in self.covariance before applying final covariance update: {self.covariance}")
                 
                 ' Incremental updating '
 
@@ -383,27 +384,28 @@ class EKFSLAM:
                 
         # end of observation loop  
         
-        eigenvalues, _ = np.linalg.eig(self.covariance)
+        # eigenvalues, _ = np.linalg.eig(self.covariance)
 
-        if np.any(eigenvalues <= 0):
-            rospy.logwarn(f"Warning: Negative or zero eigenvalues detected in self.covariance before applying final covariance update: {self.covariance}")
+        # if np.any(eigenvalues <= 0):
+        #     rospy.logwarn(f"Warning: Negative or zero eigenvalues detected in self.covariance before applying final covariance update: {self.covariance}")
 
-        rospy.loginfo("\n === CORRECTION FINISHED ====== CORRECTION FINISHED ======")
+        # rospy.loginfo("\n === CORRECTION FINISHED ====== CORRECTION FINISHED ======")
         
         correction_data["correction"]["final_state"] = self.state.tolist()
         correction_data["correction"]["final_covariance"] = self.covariance.tolist()
         
         # Save everything to the JSON file
-        self.utils.save_correction_data_to_json(correction_data)
+        # self.utils.save_correction_data_to_json(correction_data)
+        self.utils.publish_correction_data(correction_data)
 
         # self.utils.visualize_expected_Observation(z_hat_list, self.correctionCounter)
         self.correctionCounter += 1
         
-        rospy.loginfo(f"New State: {self.state}")
+        # rospy.loginfo(f"New State: {self.state}")
 
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        print(f"\n Correction function took {elapsed_time:.6f} seconds.")
+        # end_time = time.time()
+        # elapsed_time = end_time - start_time
+        # print(f"\n Correction function took {elapsed_time:.6f} seconds.")
 
         return self.state, self.covariance, self.num_landmarks
 

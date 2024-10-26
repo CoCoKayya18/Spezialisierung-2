@@ -29,55 +29,84 @@ def clear_directory(directory_path):
     print(f"Directory {directory_path} is cleared.")
 
 
-# Create directory for saving plots
 def create_directory(directory_name):
-    if not os.path.exists(directory_name):
-        os.makedirs(directory_name)
+    # Check if the directory exists
+    if os.path.exists(directory_name):
+        # Clear all contents of the directory
+        shutil.rmtree(directory_name)
+    
+    # Create a fresh directory
+    os.makedirs(directory_name)
 
 # Function to load JSON data
 def load_json_data(file_path):
+    data = []
     with open(file_path, 'r') as file:
-        data = json.load(file)
+        # Read the entire content and split by double newlines, assuming this separates JSON objects
+        content = file.read()
+        json_blocks = content.strip().split('\n\n')
+
+        for block in json_blocks:
+            try:
+                # Parse each block as a JSON object
+                json_obj = json.loads(block)
+                data.append(json_obj)
+            except json.JSONDecodeError as e:
+                print(f"Skipping invalid JSON block: {e}")
+    
     return data
 
 # Function to visualize state updates over time
-def plot_state_updates_per_correction(data, save_dir):
+def plot_state_updates_per_correction(data, save_dir, threshold=0.03):
     state_updates = []
+    high_state_updates = []
+    high_state_update_indices = []
     sum_of_updates = None  # Initialize to None, will set it to the size of the state when available
     max_state_length = 0  # Track the maximum state vector length
 
-    for correction in data:
+    for correction_idx, correction in enumerate(data):
         matched_observations = correction['correction'].get('Matched', {}).get('observations', [])
         
         # Check if there is a matched observation with a state update
         if matched_observations:
-            state_update = matched_observations[0]['landmarks'][0].get('State update', None)
+            for obs_idx, obs in enumerate(matched_observations):
+                state_update = obs['landmarks'][0].get('State update', None)
 
-            if state_update:
-                state_update = np.array(state_update).flatten()  # Convert to 1D array
-                current_state_length = len(state_update)
-                
-                # Update the max_state_length if the current state is longer
-                if current_state_length > max_state_length:
-                    # Pad all previous state updates to match the new max_state_length
-                    state_updates = [np.pad(su, (0, current_state_length - len(su)), 'constant') for su in state_updates]
-                    if sum_of_updates is not None:
-                        sum_of_updates = np.pad(sum_of_updates, (0, current_state_length - len(sum_of_updates)), 'constant')
-                    max_state_length = current_state_length
-                
-                # Initialize sum_of_updates if it hasn't been done yet
-                if sum_of_updates is None:
-                    sum_of_updates = np.zeros(current_state_length)
+                if state_update:
+                    state_update = np.array(state_update).flatten()  # Convert to 1D array
+                    current_state_length = len(state_update)
+                    
+                    # Update the max_state_length if the current state is longer
+                    if current_state_length > max_state_length:
+                        # Pad all previous state updates to match the new max_state_length
+                        state_updates = [np.pad(su, (0, current_state_length - len(su)), 'constant') for su in state_updates]
+                        if sum_of_updates is not None:
+                            sum_of_updates = np.pad(sum_of_updates, (0, current_state_length - len(sum_of_updates)), 'constant')
+                        max_state_length = current_state_length
+                    
+                    # Initialize sum_of_updates if it hasn't been done yet
+                    if sum_of_updates is None:
+                        sum_of_updates = np.zeros(current_state_length)
 
-                # Pad the state_update if it's smaller than the current max length
-                if current_state_length < max_state_length:
-                    state_update = np.pad(state_update, (0, max_state_length - current_state_length), 'constant')
+                    # Pad the state_update if it's smaller than the current max length
+                    if current_state_length < max_state_length:
+                        state_update = np.pad(state_update, (0, max_state_length - current_state_length), 'constant')
 
-                # Append the state update to state_updates
-                state_updates.append(state_update)
-                
-                # Add the state update to the sum_of_updates
-                sum_of_updates += state_update
+                    # Append the state update to state_updates
+                    state_updates.append(state_update)
+                    
+                    # Add the state update to the sum_of_updates
+                    sum_of_updates += state_update
+
+                    # Check if the first three entries exceed the threshold
+                    if any(abs(state_update[:3]) > threshold):
+                        high_state_updates.append(state_update[:3])  # Only store the first three entries
+                        high_state_update_indices.append({
+                            "correction_step": correction_idx,
+                            "observation_id": obs["observation_id"],
+                            "landmark_id": obs['landmarks'][0]['landmark_id'],
+                            "state_update": state_update[:3]
+                        })
         else:
             # Skip corrections with no state update (e.g., newly detected landmarks)
             continue
@@ -93,7 +122,7 @@ def plot_state_updates_per_correction(data, save_dir):
             plt.plot(range(1, len(state_updates) + 1), state_updates[:, i], marker='o', label=f'State {i+1} Update')
 
         # Add the sum of all updates as a text box on the plot
-        sum_text = f"Sum of all updates:\n{sum_of_updates}"
+        sum_text = f"Sum of all updates:\n{sum_of_updates[:3]}"  # Display only the sum for robot state
         plt.gcf().text(0.15, 0.75, sum_text, fontsize=12, bbox=dict(facecolor='white', alpha=0.5))
 
         plt.title('State Updates Per Correction Step')
@@ -110,6 +139,31 @@ def plot_state_updates_per_correction(data, save_dir):
         print("Sum of all state updates:", sum_of_updates)
     else:
         print("No state updates available for plotting.")
+
+    # Plot high state updates (first three entries only)
+    if high_state_updates:
+        high_state_updates = np.array(high_state_updates)
+
+        plt.figure(figsize=(10, 6))
+        for i in range(3):  # Only the first three entries (robot state)
+            plt.plot(range(1, len(high_state_updates) + 1), high_state_updates[:, i], marker='o', label=f'High State {i+1} Update')
+
+        plt.title(f'High State Updates Per Correction Step (Threshold: {threshold})')
+        plt.xlabel('Correction Step')
+        plt.ylabel('State Update Value')
+        plt.grid(True)
+        plt.legend()
+
+        # Save the plot
+        plt.savefig(os.path.join(save_dir, 'high_state_updates_per_correction.png'))
+        plt.close()
+
+        # Print high state update indices for reference in the console
+        print("High state updates (correction step, observation ID, landmark ID):")
+        for high_update in high_state_update_indices:
+            print(high_update)
+    else:
+        print("No high state updates found.")
 
 
 # Function to extract the robot's estimated path and save the plot
@@ -225,8 +279,13 @@ def plot_residuals_magnitude_matched(data, save_dir):
 def plot_residuals_matched(data, save_dir):
     range_residuals = []
     bearing_residuals = []
+    high_range_residuals = []
+    high_bearing_residuals = []
+    high_residual_indices = []
+    
+    threshold=0.18
 
-    for correction in data:
+    for idx, correction in enumerate(data):
         matched_observations = correction['correction'].get('Matched', {}).get('observations', [])
 
         # Process only if there are matched observations
@@ -241,9 +300,17 @@ def plot_residuals_matched(data, save_dir):
 
                     range_residuals.append(range_residual)
                     bearing_residuals.append(bearing_residual)
+                    
+                    # Check if either residual is above the threshold
+                    if abs(range_residual) > threshold or abs(bearing_residual) > threshold:
+                        high_range_residuals.append(range_residual)
+                        high_bearing_residuals.append(bearing_residual)
+                        high_residual_indices.append((idx, obs["observation_id"]))  # Capture the index and observation ID
 
     range_residuals = np.array(range_residuals)
     bearing_residuals = np.array(bearing_residuals)
+    high_range_residuals = np.array(high_range_residuals)
+    high_bearing_residuals = np.array(high_bearing_residuals)
 
     # Plot residuals for both range and bearing
     plt.figure(figsize=(10, 6))
@@ -258,6 +325,25 @@ def plot_residuals_matched(data, save_dir):
     # Save the plot
     plt.savefig(os.path.join(save_dir, 'measurement_residuals_matched.png'))
     plt.close()
+
+    # Plot only high residuals
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(len(high_range_residuals)), high_range_residuals, marker='o', label='High Range Residuals')
+    plt.plot(range(len(high_bearing_residuals)), high_bearing_residuals, marker='x', label='High Bearing Residuals')
+    plt.title(f'Matched Measurement Residuals Above Threshold {threshold}')
+    plt.xlabel('Correction Step')
+    plt.ylabel('Residual Value')
+    plt.grid(True)
+    plt.legend()
+
+    # Save the plot for high residuals
+    plt.savefig(os.path.join(save_dir, 'high_residuals_matched.png'))
+    plt.close()
+
+    # Output high residual indices
+    print("Indices of high residuals (correction step, observation ID):")
+    for index in high_residual_indices:
+        print(index)
 
 
 # Function to track covariance matrix growth and save the plot
@@ -522,10 +608,45 @@ def visualize_ransac_from_json(data, save_dir):
                 plt.close()
 
                 # print(f"Saved plot for Loop {loopCounter}, Iteration {iteration} to {filepath}")
+                
+def analyze_anomaly_step(data, anomaly_step):
 
+    correction = data[anomaly_step]
+    print(f"Analyzing correction step: {anomaly_step}")
+    
+    # Extract data for analysis
+    kalman_gain = correction['correction'].get('Kalman Gain')
+    state_update = correction['correction'].get('State update')
+    measurement_residual = correction['correction'].get('Measurement residual')
+    final_covariance = correction['correction'].get('Final Covariance')
+    
+    # Print or plot relevant data
+    print(f"Kalman Gain at step {anomaly_step}: {kalman_gain}")
+    print(f"State Update at step {anomaly_step}: {state_update}")
+    print(f"Measurement Residual at step {anomaly_step}: {measurement_residual}")
+    print(f"Final Covariance at step {anomaly_step}: {final_covariance}")
+
+def find_high_bearing_error(data, threshold=1.0):
+
+    high_error_measurements = []
+
+    for step_index, correction in enumerate(data):
+        observations = correction['correction']['Matched']['observations']
+        for obs in observations:
+            for landmark in obs['landmarks']:
+                bearing_residual = landmark['measurement_residual'][1]  # Get the bearing component
+                if abs(bearing_residual) > threshold:
+                    high_error_measurements.append({
+                        "correction_step": step_index,
+                        "observation_id": obs["observation_id"],
+                        "bearing_residual": bearing_residual
+                    })
+    
+    print(f"High errors: {high_error_measurements}")
 
 # Main function to run all analysis
 def analyze_ekf_slam(file_path, output_dir):
+    
     # Create directory for saving plots
     create_directory(output_dir)
 
@@ -557,6 +678,10 @@ def analyze_ekf_slam(file_path, output_dir):
     
     plot_pi_values(data, output_dir)
     
+    analyze_anomaly_step(data, 45)
+    
+    find_high_bearing_error(data, threshold=0.5)
+    
     # visualize_ransac_from_json(data, output_dir)
 
     print(f'Analysis complete. Plots saved in {output_dir}')
@@ -564,7 +689,7 @@ def analyze_ekf_slam(file_path, output_dir):
 # Example usage
 if __name__ == "__main__":
     # Define file paths
-    json_file_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/correctionData.json'  
+    json_file_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/correction_data.json'  
     output_directory = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/correctionAnalysisOutput'
 
     # Run the analysis
