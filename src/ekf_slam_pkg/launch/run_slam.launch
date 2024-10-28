@@ -19,7 +19,8 @@
 
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <!-- <arg name="world_name" value="$(find turtlebot3_gazebo)/worlds/turtlebot3_world.world"/> -->
-    <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/myWorld.world"/>
+    <!-- <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/myWorld.world"/> -->
+    <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/onlyRectangles.world"/>
     <!-- <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/mySimpleWorld.world"/> -->
     <!-- <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/mySimpleWorld_2Feat.world"/> -->
     <arg name="paused" value="false"/>
@@ -39,7 +40,6 @@
   </node>
 
   <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="static_transform_publisher" args="0.000 -0.005 0.000 0 0 0 /map /base_link" /> -->
-
 
   <!-- <node name="joint_state_publisher_gui" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui" >
     <param name="publish_frequency" type="double" value="30.0"/>
@@ -75,9 +75,10 @@
 
   <node name="main" pkg="ekf_slam_pkg" type="main.py" output="screen" required="true"> </node>
   <node name="GetJsonData" pkg="ekf_slam_pkg" type="jsonMessageSubscriber.py" output="screen"> </node>
-  <!-- <node name="MoveRobot" pkg="ekf_slam_pkg" type="moveRobotWithVel.py" output="screen" required="true"> </node> -->
+  <!-- <node name="slamPlotter" pkg="ekf_slam_pkg" type="slamPlotter.py" output="screen"> </node> -->
   <!-- <node name="SendGoal" pkg="ekf_slam_pkg" type="SendGoal.py" output="screen"> </node> -->
-
+  <!-- <node name="MoveRobot" pkg="ekf_slam_pkg" type="moveRobotWithVel.py" output="screen" required="true"> </node> -->
+  
 
   <!-- <node pkg="ekf_slam_pkg" type="correctionAnalysis.py" name="analysis_script" args="/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/Debugging Scripts/correctionAnalysis.py" launch-prefix="bash -c" respawn="false" /> -->
 

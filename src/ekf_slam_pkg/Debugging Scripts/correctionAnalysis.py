@@ -164,6 +164,106 @@ def plot_state_updates_per_correction(data, save_dir, threshold=0.03):
             print(high_update)
     else:
         print("No high state updates found.")
+    
+# Function to visualize summed state updates (x, y, theta) over time
+def plot_summed_state_updates_per_correction(data, save_dir, threshold=0.03):
+    state_updates_per_correction = []
+    high_state_updates = []
+    high_state_update_indices = []
+    sum_of_updates = np.zeros(3)  # Track sum of all updates for x, y, theta
+    max_state_length = 3  # Track the maximum state vector length (x, y, theta)
+
+    for correction_idx, correction in enumerate(data):
+        matched_observations = correction['correction'].get('Matched', {}).get('observations', [])
+        correction_sum = np.zeros(3)  # Summed update for this correction step (x, y, theta)
+
+        # Check if there is a matched observation with a state update
+        if matched_observations:
+            for obs_idx, obs in enumerate(matched_observations):
+                state_update = obs['landmarks'][0].get('State update', None)
+
+                if state_update:
+                    state_update = np.array(state_update).flatten()  # Convert to 1D array
+
+                    # Only consider the first three entries for x, y, theta
+                    state_update_xytheta = state_update[:3]
+
+                    # Add this observation's update to the correction sum
+                    correction_sum += state_update_xytheta
+
+            # Append the total update for this correction step to the list
+            state_updates_per_correction.append(correction_sum)
+            
+            # Add the correction sum to the global sum_of_updates
+            sum_of_updates += correction_sum
+
+            # Check if the first three entries exceed the threshold
+            if any(abs(correction_sum[:3]) > threshold):
+                high_state_updates.append(correction_sum[:3])  # Only store the first three entries (x, y, theta)
+                high_state_update_indices.append({
+                    "correction_step": correction_idx,
+                    "total_state_update": correction_sum[:3]
+                })
+        else:
+            # Skip corrections with no state update (e.g., newly detected landmarks)
+            continue
+
+    # Check if state updates exist
+    if state_updates_per_correction:
+        # Convert state_updates_per_correction to a 2D array
+        state_updates_per_correction = np.vstack(state_updates_per_correction)
+
+        # Plot each summed state update (x, y, theta) over time
+        plt.figure(figsize=(10, 6))
+        labels = ['X State Update', 'Y State Update', 'Theta State Update']
+        for i in range(3):  # Only the first three entries (x, y, theta)
+            plt.plot(range(1, len(state_updates_per_correction) + 1), state_updates_per_correction[:, i], 
+                     marker='o', label=labels[i])
+
+        # Add the sum of all updates as a text box on the plot
+        sum_text = f"Sum of all updates (x, y, theta):\n{sum_of_updates}"  # Display only the sum for robot state
+        plt.gcf().text(0.15, 0.75, sum_text, fontsize=12, bbox=dict(facecolor='white', alpha=0.5))
+
+        plt.title('Summed State Updates Per Correction Step (X, Y, Theta)')
+        plt.xlabel('Correction Step')
+        plt.ylabel('State Update Value')
+        plt.grid(True)
+        plt.legend()
+
+        # Save the plot
+        plt.savefig(os.path.join(save_dir, 'summed_robot_state_updates_per_correction.png'))
+        plt.close()
+
+        # Print the sum of all updates for reference in the console
+        print("Sum of all state updates (x, y, theta):", sum_of_updates)
+    else:
+        print("No state updates available for plotting.")
+
+    # Plot high state updates (first three entries only)
+    if high_state_updates:
+        high_state_updates = np.array(high_state_updates)
+
+        plt.figure(figsize=(10, 6))
+        for i in range(3):  # Only the first three entries (x, y, theta)
+            plt.plot(range(1, len(high_state_updates) + 1), high_state_updates[:, i], 
+                     marker='o', label=f'High {labels[i]} Update')
+
+        plt.title(f'High State Updates Per Correction Step (Threshold: {threshold})')
+        plt.xlabel('Correction Step')
+        plt.ylabel('State Update Value')
+        plt.grid(True)
+        plt.legend()
+
+        # Save the plot
+        plt.savefig(os.path.join(save_dir, 'high_state_updates_per_correction.png'))
+        plt.close()
+
+        # Print high state update indices for reference in the console
+        print("High state updates (correction step, total state update):")
+        for high_update in high_state_update_indices:
+            print(high_update)
+    else:
+        print("No high state updates found.")
 
 
 # Function to extract the robot's estimated path and save the plot
@@ -673,6 +773,8 @@ def analyze_ekf_slam(file_path, output_dir):
     
     # Analyze and plot state updates
     plot_state_updates_per_correction(data, output_dir)
+    
+    plot_summed_state_updates_per_correction(data, output_dir)
     
     plot_state_after_corrections(data, output_dir)
     

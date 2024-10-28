@@ -7,6 +7,7 @@ from geometry_msgs.msg import Point
 from geometry_msgs.msg import Pose
 from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import PoseArray
+from std_msgs.msg import Float64MultiArray
 from math import sqrt
 import threading
 import csv
@@ -41,7 +42,8 @@ class Robot:
         self.GT_path_pub = rospy.Publisher('/Ground_Truth_Path', Marker, queue_size=10)
         self.EKF_path_pub = rospy.Publisher('/EKF_Path', Marker, queue_size=10)
         self.map_pub = rospy.Publisher('/slam_map', Marker, queue_size=10)
-        self.pose_array_pub = rospy.Publisher("/ekf_pose_array", PoseArray, queue_size=10)
+        self.covariance_pub = rospy.Publisher('/slam_covariance', Float64MultiArray, queue_size=10)
+        # self.pose_array_pub = rospy.Publisher("/ekf_pose_array", PoseArray, queue_size=10)
         
         self.current_pose = None    
         self.current_vel = np.zeros((3, 1))
@@ -106,6 +108,8 @@ class Robot:
 
             self.publish_EKF_path(self.state, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
             
+            self.publish_covariance()
+            
             end_execution_time = time.time()
             # rospy.loginfo(f"odom_callback runtime: {end_execution_time - start_execution_time:.4f} seconds")
             
@@ -120,8 +124,8 @@ class Robot:
 
     def scan_callback(self, msg):
         
-        # profiler = cProfile.Profile()
-        # profiler.enable()
+        profiler = cProfile.Profile()
+        profiler.enable()
         
         transformed_scan = msg
         
@@ -159,6 +163,8 @@ class Robot:
 
             self.publish_EKF_path(self.state, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
             
+            self.publish_covariance()
+            
             end_execution_time = time.time()
             # rospy.loginfo(f"scan_callback runtime: {end_execution_time - start_execution_time:.4f} seconds")
             
@@ -168,8 +174,8 @@ class Robot:
 
             # rospy.loginfo(f"scan_callback execution frequency: {execution_frequency:.2f} Hz")
 
-        # profiler.disable()
-        # profiler.dump_stats('/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/profiler_output_correction.prof')
+        profiler.disable()
+        profiler.dump_stats('/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/profiler_output_correction.prof')
 
     def ground_truth_callback(self, msg):
         self.ground_truth_path.append(msg.pose.pose)
@@ -296,3 +302,14 @@ class Robot:
         else:
             rospy.logwarn("No subscribers to the map topic or the topic is closed.")
 
+    def publish_covariance(self):
+
+        # Extract the top-left 3x3 block of the covariance matrix
+        robot_state_covariance = self.covariance[:3, :3].flatten()
+
+        # Create a Float64MultiArray message
+        covariance_msg = Float64MultiArray()
+        covariance_msg.data = robot_state_covariance
+
+        # Publish the covariance matrix
+        self.covariance_pub.publish(covariance_msg)

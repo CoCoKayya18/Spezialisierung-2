@@ -166,6 +166,7 @@ catkin_install_python(PROGRAMS
   src/SendGoal.py
   src/moveRobotWithVel.py
   src/jsonMessageSubscriber.py
+  src/slamPlotter.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

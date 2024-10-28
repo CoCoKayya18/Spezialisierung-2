@@ -9,5 +9,5 @@ sensor:
   noise: 0.1
 
 ekf:
-  process_noise: 0.03
-  measurement_noise: 0.35
+  process_noise: 0.001
+  measurement_noise: 0.5

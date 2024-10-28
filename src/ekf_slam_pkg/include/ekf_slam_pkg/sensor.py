@@ -8,8 +8,10 @@ import matplotlib.pyplot as plt
 import os
 import json
 from sklearn.linear_model import RANSACRegressor
+from scipy.spatial import ConvexHull
 
 class Sensor:
+    
     def __init__(self, config, utils):
         rospy.loginfo("Sensor class initialized")
         self.plot_counter = 1
@@ -24,98 +26,144 @@ class Sensor:
         
         pass
     
-    def extract_features_only_DBSCAN(self, scan_data, angle_min, angle_max, angle_increment, counter, eps=0.15, min_samples=5):
-        # Extracts features from LiDAR scan data using DBSCAN clustering
+    def extract_features_only_DBSCAN(self, scan_data, angle_min, angle_max, angle_increment, counter, eps=0.25, min_samples=5):
+            # Extracts features from LiDAR scan data using DBSCAN clustering
 
-        # Extract ranges from the LaserScan message
-        ranges = np.array(scan_data.ranges)
+            # Extract ranges from the LaserScan message
+            ranges = np.array(scan_data.ranges)
 
-        # Convert polar coordinates (range and angle) to Cartesian coordinates (x, y)
-        angles = angle_min + np.arange(len(ranges)) * angle_increment
-        x_coords = ranges * np.cos(angles)
-        y_coords = ranges * np.sin(angles)
+            # Convert polar coordinates (range and angle) to Cartesian coordinates (x, y)
+            angles = angle_min + np.arange(len(ranges)) * angle_increment
+            x_coords = ranges * np.cos(angles)
+            y_coords = ranges * np.sin(angles)
 
-        # Stack x and y coordinates into a single array
-        points = np.vstack((x_coords, y_coords)).T
+            # Stack x and y coordinates into a single array
+            points = np.vstack((x_coords, y_coords)).T
 
-        # Remove points with invalid ranges (e.g., 0 or inf values)
-        valid_points = points[np.isfinite(points).all(axis=1)]
+            # Remove points with invalid ranges (e.g., 0 or inf values)
+            valid_points = points[np.isfinite(points).all(axis=1)]
 
-        if valid_points.size == 0:
-            rospy.loginfo("No valid points found in the scan data.")
-            return []
+            if valid_points.size == 0:
+                rospy.loginfo("No valid points found in the scan data.")
+                return []
 
-        # Apply DBSCAN clustering algorithm
-        db = DBSCAN(eps=eps, min_samples=min_samples).fit(valid_points)
-        labels = db.labels_
+            # Apply DBSCAN clustering algorithm
+            db = DBSCAN(eps=eps, min_samples=min_samples).fit(valid_points)
+            labels = db.labels_
 
-        # Dictionary to store clusters and their centroids
-        cluster_dict = {}
-        polar_centroid_list = []
-        cartesian_centroid_list = []
-        
-        # Get the set of unique labels (each unique cluster has a unique label, -1 is noise)
-        unique_labels = set(labels)
-        
-        # Plotting setup
-        # plt.figure()
-        # colormap = plt.cm.get_cmap('tab10', len(unique_labels))
-        
-        iteration = 0
-        
-        for label in unique_labels:
-            if label == -1:
-                continue  # Skip noise points
+            # Lists to store cluster centroids and corner points
+            polar_centroid_list = []
+            cartesian_centroid_list = []
+            corner_points_list = []
+            polar_corner_list = []
             
-            iteration += 1
+            # Get the set of unique labels (each unique cluster has a unique label, -1 is noise)
+            unique_labels = set(labels)
+            
+            # # Plotting setup
+            # plt.figure(figsize=(8, 8))
+            # colormap = plt.cm.get_cmap('tab20', len(unique_labels))
+            
+            iteration = 0
+            
+            for label in unique_labels:
+                if label == -1:
+                    continue  # Skip noise points
+                
+                iteration += 1
 
-            # Extract points belonging to the current cluster
-            cluster_points = valid_points[labels == label]
-            
-            # Save cluster points in a dictionary
-            cluster_dict[label] = cluster_points
-            
-            # Calculate the centroid of the cluster (mean of the x and y coordinates)
-            centroid_x, centroid_y = np.mean(cluster_points, axis=0)
+                # Extract points belonging to the current cluster
+                cluster_points = valid_points[labels == label]
+                
+                # Calculate the centroid of the cluster (mean of the x and y coordinates)
+                centroid_x, centroid_y = np.mean(cluster_points, axis=0)
+                cartesian_centroid_list.append((centroid_x, centroid_y))
 
-            # Convert the centroid from Cartesian to polar coordinates
-            range_centroid = np.sqrt(centroid_x**2 + centroid_y**2)
-            angle_centroid = np.arctan2(centroid_y, centroid_x)
-            
-            # Store the polar coordinates of the centroid
-            polar_centroid_list.append((range_centroid, angle_centroid))
-            
-            cartesian_centroid_list.append((centroid_x, centroid_y))
-            
-            # # Plot the cluster points with a unique color
-            # plt.scatter(cluster_points[:, 0], cluster_points[:, 1], color=colormap(label), marker='o', label=f'Cluster {label} Points')
-            
-            # # Plot the centroid in the same color but with a larger, distinct marker
-            # plt.scatter(centroid_x, centroid_y, marker='x', color=colormap(label), s=200, edgecolor='black', label=f'Cluster {label} Centroid')
+                # Convert the centroid from Cartesian to polar coordinates
+                range_centroid = np.sqrt(centroid_x**2 + centroid_y**2)
+                angle_centroid = np.arctan2(centroid_y, centroid_x)
+                polar_centroid_list.append((range_centroid, angle_centroid))
+                
+                # corners = self.detect_corners_from_DBScan(cluster_points)
+                corners = self.detect_corners_by_triplet(cluster_points)
+                corners = self.filter_close_corners(corners)
+                for corner in corners:
+                    # Convert corner to polar coordinates
+                    range_corner = np.sqrt(corner[0]**2 + corner[1]**2)
+                    angle_corner = np.arctan2(corner[1], corner[0])
+                    polar_corner_list.append((range_corner, angle_corner))
+                
+                # # Plot the cluster points
+                # plt.scatter(cluster_points[:, 0], cluster_points[:, 1], color=colormap(label), marker='o', s=10, label=f'Cluster {label}')
+                
+                # # Plot the centroid in the same color but with a larger, distinct marker
+                # plt.scatter(centroid_x, centroid_y, marker='x', color=colormap(label), s=100, edgecolor='black', label=f'Centroid {label}')
 
-            # # Optionally: You could also log or visualize the centroid for debugging
-            # rospy.loginfo(f"Cluster {label} centroid (polar): range={range_centroid}, angle={angle_centroid}")
+                # # Plot corner points
+                # for corner in corners:
+                #     plt.scatter(corner[0], corner[1], color='red', marker='x', s=50, label=f'Corner {label}')
+
+            
+            # # Display corner points in the log
+            # rospy.loginfo(f"Corner points detected: {corner_points_list}")
+
+            # # Plot settings
+            # plt.xlabel('X Coordinates [m]')
+            # plt.ylabel('Y Coordinates [m]')
+            # plt.title(f'DBSCAN Clustering and Corner Detection - Correction {counter}')
+            # plt.legend(loc='upper right', fontsize='small')
+            # plt.grid(True)
+
+            # # Save or show plot
+            # save_dir = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/DBSCAN_Plots'
+            # filename = f'detected_features_loop_{counter}.png'
+            # filepath = os.path.join(save_dir, filename)
+            # plt.savefig(filepath)
+            # plt.close()
+
+            
+            # Return the list of centroids in polar coordinates
+            return polar_corner_list
         
-        # # Plot setup
-        # plt.xlabel('X Coordinates')
-        # plt.ylabel('Y Coordinates')
-        # plt.title(f'DBSCAN Clustering and Centroid Visualization Correction {counter} iteration {iteration}')
-        # plt.legend(loc='upper right')
-        # plt.grid(True)
-        
-        # save_dir = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/DBSCAN_Plots'
+    def detect_corners_from_DBScan(self, cluster_points, angle_threshold=70, min_distance=0.2, exclude_edges=2, neighbor_offset=2):
+        corners = []
+        for i in range(exclude_edges, len(cluster_points) - exclude_edges - neighbor_offset):
+            v1 = cluster_points[i] - cluster_points[i - neighbor_offset]
+            v2 = cluster_points[i + neighbor_offset] - cluster_points[i]
+            angle = np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
+            angle_deg = np.degrees(angle)
+            
+            # Apply angle and distance filtering
+            if angle_deg < angle_threshold:
+                if len(corners) == 0 or np.linalg.norm(cluster_points[i] - corners[-1]) > min_distance:
+                    corners.append(cluster_points[i])
+        return corners
 
-        # # Show the plot
-        # filename = f'detected_features_loop_{counter}_iteration_{iteration}.png'
-        # filepath = os.path.join(save_dir, filename)
-        # plt.savefig(filepath)
-        # plt.close()
-        
-        # Return the list of centroids in polar coordinates
-        return polar_centroid_list
+    def detect_corners_by_triplet(self, cluster_points, distance_threshold=0.03):
+        corners = []
+        for i in range(1, len(cluster_points) - 1):
+            p1, p2, p3 = cluster_points[i - 1], cluster_points[i], cluster_points[i + 1]
 
+            # Vector from p1 to p3
+            line_vec = p3 - p1
+            line_len = np.linalg.norm(line_vec)
+            if line_len == 0:
+                continue  # Skip if points are too close
 
-    def extract_features_from_scan(self, scan_data, angle_min, angle_max, angle_increment, counter, eps=0.05, min_samples=5):
+            # Projection of p2 onto the line p1-p3
+            projection = ((p2 - p1).dot(line_vec) / line_len**2) * line_vec
+            proj_point = p1 + projection
+            
+            # Calculate distance from p2 to the line
+            deviation = np.linalg.norm(p2 - proj_point)
+            
+            # Check if the deviation exceeds the threshold
+            if deviation > distance_threshold:
+                corners.append(p2)
+                
+        return corners
+
+    def extract_features_from_scan(self, scan_data, angle_min, angle_max, angle_increment, counter, eps=0.25, min_samples=5):
             # Extracts features from LiDAR scan data using DBSCAN clustering
 
             # Extract ranges from the LaserScan message
@@ -161,6 +209,7 @@ class Sensor:
             
             features = []
             line_features = []
+            all_lines = []
             circle_feature = []
             corner_features = []
             iteration = 0
@@ -170,12 +219,14 @@ class Sensor:
                 iteration += 1
                 
                 # Here you can decide whether to apply RANSAC for circles or lines
-                if self.is_circle(cluster_points, counter, iteration):
-                    circle_feature = circle_feature + self.detect_circles_ransac(cluster_points, counter, iteration)
-                else:
-                    line_features = line_features + self.detect_lines_ransac(cluster_points, counter, iteration)
-                    corner_features = corner_features + self.detect_line_intersections(line_features, cluster_points)
-            
+                # if self.is_circle(cluster_points, counter, iteration):
+                #     circle_feature = circle_feature + self.detect_circles_ransac(cluster_points, counter, iteration)
+                # else:
+                line_features = self.detect_lines_ransac(cluster_points, counter, iteration)
+                all_lines = all_lines + line_features
+                corner_features = corner_features + self.detect_line_intersections(line_features, cluster_points)
+                # self.visualize_features(valid_points, labels, line_features, corner_features, circle_feature, counter)
+                
             max_valid_range = 3.5 # Max laser range reach
 
             if corner_features:
@@ -191,24 +242,93 @@ class Sensor:
                     polar_corner = self.cartesian_to_polar(corner[0], corner[1])
                     features.append(polar_corner)
 
-            if circle_feature:
+            # if circle_feature:
                 
-                # Filter invalid circle middle points out
-                circle_feature[:] = [circle for circle in circle_feature 
-                         if self.cartesian_to_polar(circle[0], circle[1])[0] <= max_valid_range]
+            #     # Filter invalid circle middle points out
+            #     circle_feature[:] = [circle for circle in circle_feature 
+            #              if self.cartesian_to_polar(circle[0], circle[1])[0] <= max_valid_range]
                 
-                circle_feature = self.filter_close_circle_centers(circle_feature)
+            #     circle_feature = self.filter_close_circle_centers(circle_feature)
                 
-                # Convert circle features to polar coordinates and append to features list
-                for circle in circle_feature:
-                    circle_center_x, circle_center_y, radius = circle
-                    polar_circle_center = self.cartesian_to_polar(circle_center_x, circle_center_y)
-                    # Append as (r, phi, radius)
-                    features.append(polar_circle_center)
+            #     # Convert circle features to polar coordinates and append to features list
+            #     for circle in circle_feature:
+            #         circle_center_x, circle_center_y, radius = circle
+            #         polar_circle_center = self.cartesian_to_polar(circle_center_x, circle_center_y)
+            #         # Append as (r, phi, radius)
+            #         features.append(polar_circle_center)
 
-            # self.visualize_features(valid_points, labels, line_features, corner_features, circle_feature, counter)
+            # self.visualize_features(valid_points, labels, all_lines, corner_features, circle_feature, counter)
 
             # rospy.loginfo(f"\n Following features detected: {features}")
+            
+            return features
+    
+    def extract_features_from_scan_SplitAndMerge(self, scan_data, angle_min, angle_max, angle_increment, counter, eps=0.25, min_samples=5):
+            # Extracts features from LiDAR scan data using DBSCAN clustering
+
+            # Extract ranges from the LaserScan message
+            ranges = np.array(scan_data.ranges)
+
+            # Convert polar coordinates (range and angle) to Cartesian coordinates (x, y)
+            angles = angle_min + np.arange(len(ranges)) * angle_increment
+
+            x_coords = ranges * np.cos(angles)
+            y_coords = ranges * np.sin(angles)
+
+            # Stack x and y coordinates into a single array
+            points = np.vstack((x_coords, y_coords)).T
+
+            # Remove points with invalid ranges (e.g., 0 or inf values)
+            valid_points = points[np.isfinite(points).all(axis=1)]
+
+            if valid_points.size == 0:
+                rospy.loginfo("No valid points found in the scan data.")
+                return []
+
+            # Apply DBSCAN clustering algorithm
+            db = DBSCAN(eps=eps, min_samples=min_samples).fit(valid_points)
+            labels = db.labels_
+            
+            # self.visualize_dbscan_result(valid_points, labels, counter)
+
+            # Extract features from each cluster
+            # features = []
+            cluster_dict = {}
+            unique_labels = set(labels)
+            
+            for label in unique_labels:
+                if label == -1:
+                    continue  # Skip noise points
+
+                # Extract points belonging to the current cluster
+                cluster_points = valid_points[labels == label]
+                
+                # Save cluster points in a dictionary
+                cluster_dict[label] = cluster_points
+            
+            features = []
+            max_valid_range = 3.5  # Max laser range reach
+            all_segments = []
+            all_corners = []
+            circle = []
+            iteration = 0
+            
+            for cluster_label, cluster_points in cluster_dict.items():
+               
+                iteration += 1
+                
+                segments, corners = self.split_and_merge(cluster_points)
+                valid_corners = [corner for corner in corners if np.linalg.norm(corner) <= max_valid_range]
+                
+                all_segments += segments
+                all_corners += valid_corners
+
+                # Convert corner features to polar coordinates and append to features list
+                for corner in valid_corners:
+                    polar_corner = self.cartesian_to_polar(corner[0], corner[1])
+                    features.append(polar_corner)
+                
+            # self.visualize_features(valid_points, labels, all_segments, all_corners, circle, counter)
             
             return features
         
@@ -266,13 +386,13 @@ class Sensor:
                 plt.text(mid_x, mid_y, f'{i+1}', fontsize=12, color='blue', ha='center')
 
         # Plot detected circles (in green)
-        if circle_features:
-            for i, circle in enumerate(circle_features):
-                # Unpack the tuple from the list inside 'circle'
-                xc, yc, radius = circle
-                circle_patch = plt.Circle((xc, yc), radius, color='g', fill=False, linewidth=2, label='Detected Circle')
-                plt.gca().add_patch(circle_patch)
-                plt.text(xc, yc, f'{i+1}', fontsize=12, color='green', ha='center')
+        # if circle_features:
+        #     for i, circle in enumerate(circle_features):
+        #         # Unpack the tuple from the list inside 'circle'
+        #         xc, yc, radius = circle
+        #         circle_patch = plt.Circle((xc, yc), radius, color='g', fill=False, linewidth=2, label='Detected Circle')
+        #         plt.gca().add_patch(circle_patch)
+        #         plt.text(xc, yc, f'{i+1}', fontsize=12, color='green', ha='center')
         
         # Plot detected corners/intersections (in red)
         if corner_features:
@@ -291,19 +411,18 @@ class Sensor:
         # Save the plot
         filename = f'detected_features_loop_{loopCounter}.png'
         filepath = os.path.join(save_dir, filename)
-        plt.savefig(filepath)
         # plt.show()
+        plt.savefig(filepath)
         plt.close()
 
-
-    def detect_lines_ransac(self, points, loopCounter, iteration, residual_threshold=0.0275, min_samples=3, max_trials=500, stop_probability=0.99, min_inliers=8):
+    def detect_lines_ransac(self, points, loopCounter, iteration, residual_threshold=0.03, min_samples=3, max_trials=50, stop_probability=0.95, min_inliers=5):
         lines = []
         remaining_points = points.copy()
         iteration = iteration
 
         while len(remaining_points) > min_inliers:
             
-            # iteration += 1
+            iteration += 1
             
             # Fit a line using RANSAC
             x_coords = remaining_points[:, 0].reshape(-1, 1)  # reshape for sklearn
@@ -383,7 +502,7 @@ class Sensor:
         plt.savefig(filepath)
         plt.close()
 
-    def detect_line_intersections(self, lines, points, parallel_tolerance=1e-1):
+    def detect_line_intersections(self, lines, points, parallel_tolerance=0.2, distance_threshold=0.2):
         intersections = []
         for i in range(len(lines)):
             for j in range(i + 1, len(lines)):
@@ -393,23 +512,22 @@ class Sensor:
                 # Check if lines are parallel
                 if abs(slope1 - slope2) < parallel_tolerance:
                     continue
-                
-                # # Check if lines are parallel
-                # if slope1 == slope2:
-                #     continue  # Parallel lines do not intersect
 
                 # Calculate the intersection point (x, y)
                 x_intersection = (intercept2 - intercept1) / (slope1 - slope2)
                 y_intersection = slope1 * x_intersection + intercept1
                 
-                # intersections.append((x_intersection, y_intersection))
+                intersections.append((x_intersection, y_intersection))
                 
-                # Check if the intersection point lies within a valid range
-                x_min, x_max = np.min(points[:, 0]), np.max(points[:, 0])
-                y_min, y_max = np.min(points[:, 1]), np.max(points[:, 1])
-
-                if x_min <= x_intersection <= x_max and y_min <= y_intersection <= y_max:
-                    intersections.append((x_intersection, y_intersection))
+        # Filter intersections based on proximity to points in clusters
+        filtered_intersections = []
+        for intersection in intersections:
+            x_inter, y_inter = intersection
+            distances = np.linalg.norm(points - np.array([x_inter, y_inter]), axis=1)
+            
+            # Keep the intersection if it is within the distance threshold of any point in the cluster
+            if np.any(distances < distance_threshold):
+                filtered_intersections.append(intersection)
 
         return intersections
 
@@ -554,7 +672,7 @@ class Sensor:
         phi = atan2(y, x)
         return (r, phi)
 
-    def filter_close_corners(self, corners, min_distance=0.3):
+    def filter_close_corners(self, corners, min_distance=0.4):
         if len(corners) == 0:
             return corners
 
@@ -566,7 +684,7 @@ class Sensor:
 
         return filtered_corners
     
-    def filter_close_circle_centers(self, circle_feature, min_distance = 0.3):
+    def filter_close_circle_centers(self, circle_feature, min_distance = 0.7):
         filtered_circles = []
         
         for i, circle in enumerate(circle_feature):
@@ -761,59 +879,59 @@ class Sensor:
     def get_points(self):
         return self.points
     
-    # def detect_corners_and_circles_ransac(self, lidar_data, angle_min, angle_max, angle_increment, counter, distance_threshold=0.75, angle_threshold=np.pi / 3):
-        
-    #     num_points = len(lidar_data.ranges)
-        
-    #     # Convert polar coordinates (range, angle) to Cartesian (x, y)
-    #     angles = angle_min + np.arange(num_points) * angle_increment
-    #     ranges = np.array(lidar_data.ranges)
-        
-    #     # Filter out invalid ranges (inf or NaN)
-    #     valid_indices = np.isfinite(ranges)
-    #     ranges = ranges[valid_indices]
-    #     angles = angles[valid_indices]
-        
-    #     # Convert to Cartesian coordinates
-    #     x_coords = ranges * np.cos(angles)
-    #     y_coords = ranges * np.sin(angles)
+    def split_and_merge(self, points, split_threshold=0.005, min_points=3):
+        def fit_line_segment(segment_points):
+            x = segment_points[:, 0]
+            y = segment_points[:, 1]
+            A = np.vstack([x, np.ones(len(x))]).T
+            slope, intercept = np.linalg.lstsq(A, y, rcond=None)[0]
+            return slope, intercept
 
-    #     points = np.vstack((x_coords, y_coords)).T
-        
-    #     self.points = points
+        def point_line_distance(point, line):
+            slope, intercept = line
+            x, y = point
+            return abs(slope * x - y + intercept) / np.sqrt(slope**2 + 1)
 
-    #     # Detect lines using RANSAC
-    #     lines = self.detect_lines_ransac(points, counter)
-        
-    #     # Detect line intersections (corners)
-    #     corners = self.detect_line_intersections(lines)
-    #     corners = self.filter_corners_by_distance(corners)
-    #     self.corners = corners
+        segments = []
+        stack = [(0, len(points) - 1)]
+        print(f"Initial stack: {stack}")
 
-    #     # Detect circles using RANSAC
-    #     # best_circle, circle_inliers = self.detect_circles_ransac(points)
-    #     # self.circles = best_circle
-        
-    #     best_circle = None
+        while stack:
+            start_idx, end_idx = stack.pop()
+            segment_points = points[start_idx:end_idx + 1]
 
-    #     # Convert corner points to polar coordinates
-    #     corner_polar_coords = [self.cartesian_to_polar(x, y) for (x, y) in corners]
+            # Avoid splitting very small segments
+            if len(segment_points) < min_points:
+                print(f"Segment too small, skipped: start_idx={start_idx}, end_idx={end_idx}")
+                continue
 
-    #     # Convert circle midpoint to polar coordinates (if a circle was detected)
-    #     if best_circle is not None:
-    #         circle_center = (best_circle[0], best_circle[1])
-    #         circle_polar_coords = [list(self.cartesian_to_polar(circle_center[0], circle_center[1]))]
-    #     else:
-    #         circle_polar_coords = []
+            line = fit_line_segment(segment_points)
 
-    #     # Visualize the results
-    #     # self.utils.plot_async(self.visualize_lidar_data, points, corners, [best_circle], lines, counter, base_name="lidar_extraction")
-    #     # self.visualize_lidar_data(points, corners, [best_circle], lines, counter, base_name="lidar_extraction")
-        
-    #     features = corner_polar_coords + circle_polar_coords
-        
-    #     # rospy.loginfo(f"Features: {features}")
-        
-    #     # self.save_features(lines, [best_circle] if best_circle else [])
+            distances = [point_line_distance(p, line) for p in segment_points]
+            max_distance = max(distances)
+            max_index = start_idx + distances.index(max_distance)
 
-    #     return features
+            # Prevent infinite loop by checking if max_index is at start or end of the segment
+            if max_distance > split_threshold and max_index != start_idx and max_index != end_idx:
+                print(f"Splitting segment at max_index={max_index}")
+                stack.append((start_idx, max_index))
+                stack.append((max_index, end_idx))
+            else:
+                print(f"Adding segment: start_idx={start_idx}, end_idx={end_idx}")
+                segments.append((line, (points[start_idx], points[end_idx])))
+
+            print(f"Current stack: {stack}")
+
+        # Extract corners as intersections between segments
+        corners = []
+        for i in range(1, len(segments)):
+            line1, end_points1 = segments[i - 1]
+            line2, end_points2 = segments[i]
+            if abs(line1[0] - line2[0]) > 1e-6:
+                x_intersect = (line2[1] - line1[1]) / (line1[0] - line2[0])
+                y_intersect = line1[0] * x_intersect + line1[1]
+                if min(end_points1[1][0], end_points2[0][0]) <= x_intersect <= max(end_points1[1][0], end_points2[0][0]):
+                    corners.append((x_intersect, y_intersect))
+
+        print(f"Total segments found: {len(segments)}")
+        return segments, corners

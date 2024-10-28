@@ -20,7 +20,7 @@ class EKFSLAM:
         self.covariance = np.zeros((3, 3))
         self.num_landmarks = 0 
         self.state = np.eye(3)
-        self.alpha = 5
+        self.alpha = 10
 
         self.F_x = np.eye(3)
         
@@ -28,6 +28,8 @@ class EKFSLAM:
         
         self.process_noise = np.array([[np.power(config['process_noise'],2),0,0],[0, np.power(config['process_noise'],2),0], [0, 0, np.power(config['process_noise'],2)]]) 
         self.measurement_noise = np.array([[np.power(config['measurement_noise'],2),0],[0, np.power(config['measurement_noise'],2)]])
+        # self.measurement_noise = np.array([[np.power(0.4,2),0],[0, np.power(0.4,2)]])
+
 
         self.correctionCounter = 1
 
@@ -40,12 +42,10 @@ class EKFSLAM:
             self.scaler_X = pickle.load(file)
         with open(scalerY_path, 'rb') as file:
             self.scaler_Y = pickle.load(file)
-
         with open(model_path, 'rb') as file:
             self.model = pickle.load(file)
 
         rospy.loginfo("EKF Class initialized")
-        
 
     # EKF prediction step
     def predict(self, currentVel, currentPosition, currentCovariance, num_landmarks):
@@ -76,6 +76,7 @@ class EKFSLAM:
         F_x[2, 2] = 1
         
         predictedDelta = np.array(predictedDelta).reshape(-1, 1)
+        predictedDelta[2] = self.utils.normalize_angle(predictedDelta[2])
 
         self.state += F_x.T @ predictedDelta
 
@@ -87,7 +88,7 @@ class EKFSLAM:
 
     def correct(self, scanMessage, currentStateVector, currentCovarianceMatrix):
 
-        # rospy.loginfo("\n === CORRECTION BEGINNING ====== CORRECTION BEGINNING ======")
+        rospy.loginfo(f"\n === CORRECTION {self.correctionCounter} BEGINNING ====== CORRECTION {self.correctionCounter} BEGINNING ======")
 
         # start_time = time.time()
 
@@ -103,15 +104,12 @@ class EKFSLAM:
 
         z_t = self.sensor.extract_features_only_DBSCAN(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment, self.correctionCounter)
 
-        # Start observation loop
+        # z_t = self.sensor.extract_features_from_scan_SplitAndMerge(scanMessage, scanMessage.angle_min, scanMessage.angle_max, scanMessage.angle_increment, self.correctionCounter)
 
         observation_counter = 0
 
         kalman_gain_list = []
-        best_z_hat_list = []
-        best_H_Matrix_list = []
-        all_pi_list = []
-        best_pi_list = []
+        new_landmarks = []
         
         # Initialize the structure to store the correction data
         correction_data = {
@@ -130,48 +128,10 @@ class EKFSLAM:
                 },
                 "final_state": None,
                 "final_covariance": None
-                # "features": {  # Add features section for lines, circles, corners, points
-                #     "lines": [],
-                #     "corners": [],
-                #     "circles": [],
-                #     "points": []
-                # }
             }
         }
-        
-        # lines_data = self.sensor.get_lines()
-        # corners = self.sensor.get_corners()
-        # circles = self.sensor.get_circles()
-        # points = self.sensor.get_points()
-        
-        # if lines_data:
-        #     correction_data["correction"]["features"]["lines"] = [
-        #         {
-        #             "slope": line["slope"],
-        #             "intercept": line["intercept"],
-        #             "iteration": line["iteration"],
-        #             "loopCounter": line["loopCounter"],
-        #             "inliers": line["inliers"],  # Store inliers for visualization
-        #             "outliers": line["outliers"]  # Store outliers for visualization
-        #         }
-        #         for line in lines_data
-        #     ]
 
-        # if corners:
-        #     correction_data["correction"]["features"]["corners"] = [
-        #         {"x": x, "y": y} for x, y in corners
-        #     ]
-
-        # if circles:
-        #     correction_data["correction"]["features"]["circles"] = [
-        #         {"x_center": xc, "y_center": yc, "radius": radius} for xc, yc, radius in circles
-        #     ]
-
-        # if points is not None:
-        #     correction_data["correction"]["features"]["points"] = [
-        #         {"x": x, "y": y} for x, y in points
-        #     ]
-
+        # Start observation loop
         for z_i in z_t:
 
             observation_counter += 1
@@ -198,12 +158,8 @@ class EKFSLAM:
 
             tempCovariance = np.zeros((n + 2, n + 2))
             tempCovariance[:n, :n] = self.covariance
-            # Initialize landmark uncertainty proportional to the range measurement
-            # initial_landmark_uncertainty = (z_i[0] ** 2) / 130
             
-            # initial_landmark_uncertainty = 5
-
-            initial_landmark_uncertainty = 0.1
+            initial_landmark_uncertainty = 0.05
 
             tempCovariance[n:, n:] = np.array([[initial_landmark_uncertainty, 0],
                                             [0, initial_landmark_uncertainty]])
@@ -240,13 +196,6 @@ class EKFSLAM:
                 # Compute Mahalanobis distance
                 
                 Psi_k = H_k_t @ tempCovariance @ H_k_t.T + self.measurement_noise
-                
-                # rospy.loginfo(f"Psi matrix: {Psi_k}")
-                
-                # eigenvalues, _ = np.linalg.eig(Psi_k)
-
-                # if np.any(eigenvalues <= 0):
-                #     rospy.logwarn(f"Warning: Negative or zero eigenvalues detected in Psi_k: {Psi_k}")
 
                 measurement_residual_k = z_i - z_hat_k
 
@@ -291,11 +240,13 @@ class EKFSLAM:
                 # rospy.loginfo(f"\n ADDING NEW LANDMARK at obs {observation_counter}, landmark {landmark_counter}")
 
                 # Update state vector to include the new landmark
-                self.state = tempState
-                self.covariance = tempCovariance
+                # self.state = tempState
+                # self.covariance = tempCovariance
 
-                # Update the number of landmarks
-                self.num_landmarks = temp_num_landmarks
+                # # Update the number of landmarks
+                # self.num_landmarks = temp_num_landmarks
+                
+                new_landmarks.append(new_landmark)
                 
                 measurement_residual_forJson = z_i - z_hat_list[best_landmark_index]
                 measurement_residual_forJson[1] = self.utils.normalize_angle(measurement_residual_forJson[1])
@@ -323,21 +274,10 @@ class EKFSLAM:
                 best_z_hat = z_hat_list[best_landmark_index]
                 
                 temp_num_landmarks -= 1
-            
-                # Add both variables to the list for later
-                # best_H_Matrix_list.append(best_H_matrix)
-                # best_z_hat_list.append(best_z_hat)
-                
-                
-                # best_pi_list.append(pi_list[best_landmark_index])
-                # all_pi_list.append(pi_list)
-                
-                # rospy.loginfo(f"Inverse of psi: {np.linalg.inv(psi_list[best_landmark_index])}")
                     
-                # Calculte Kalman gain and att it to the list
+                # Calculate Kalman gain and att it to the list
                 Kalman_gain = self.covariance @ best_H_matrix.T @ np.linalg.inv(psi_list[best_landmark_index])
                 kalman_gain_list.append(Kalman_gain)
-                
                 
                 ' Incremental updating '
                 
@@ -346,17 +286,13 @@ class EKFSLAM:
                 
                 state_update = Kalman_gain @ measurement_residual
                 state_update = state_update.reshape((state_update.shape[0], 1))
+                state_update[2] = self.utils.normalize_angle(state_update[2])
 
                 covariance_update = Kalman_gain @ best_H_matrix
                 
                 self.state += state_update
                 self.state[2] = self.utils.normalize_angle(self.state[2])  # Normalize the orientation angle
                 self.covariance = (np.eye(covariance_update.shape[0]) - covariance_update) @ self.covariance
-                
-                # eigenvalues, _ = np.linalg.eig(self.covariance)
-
-                # if np.any(eigenvalues <= 0):
-                #     rospy.logwarn(f"Warning: Negative or zero eigenvalues detected in self.covariance before applying final covariance update: {self.covariance}")
                 
                 ' Incremental updating '
 
@@ -382,14 +318,15 @@ class EKFSLAM:
 
                 correction_data["correction"]["Matched"]["observations"].append(matched_observation)
                 
-        # end of observation loop  
+        # end of observation loop
         
-        # eigenvalues, _ = np.linalg.eig(self.covariance)
-
-        # if np.any(eigenvalues <= 0):
-        #     rospy.logwarn(f"Warning: Negative or zero eigenvalues detected in self.covariance before applying final covariance update: {self.covariance}")
-
-        # rospy.loginfo("\n === CORRECTION FINISHED ====== CORRECTION FINISHED ======")
+        for new_landmark_data in new_landmarks:
+            self.state = np.vstack((self.state, new_landmark_data.reshape(2, 1)))
+            self.num_landmarks += 1
+            temp_covariance = np.zeros((self.covariance.shape[0] + 2, self.covariance.shape[1] + 2))
+            temp_covariance[:self.covariance.shape[0], :self.covariance.shape[1]] = self.covariance
+            temp_covariance[-2:, -2:] = np.array([[initial_landmark_uncertainty, 0], [0, initial_landmark_uncertainty]])
+            self.covariance = temp_covariance
         
         correction_data["correction"]["final_state"] = self.state.tolist()
         correction_data["correction"]["final_covariance"] = self.covariance.tolist()
