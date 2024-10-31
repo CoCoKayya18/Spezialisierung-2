@@ -75,8 +75,8 @@
 
   <node name="main" pkg="ekf_slam_pkg" type="main.py" output="screen" required="true"> </node>
   <node name="GetJsonData" pkg="ekf_slam_pkg" type="jsonMessageSubscriber.py" output="screen"> </node>
-  <!-- <node name="slamPlotter" pkg="ekf_slam_pkg" type="slamPlotter.py" output="screen"> </node> -->
-  <!-- <node name="SendGoal" pkg="ekf_slam_pkg" type="SendGoal.py" output="screen"> </node> -->
+  <node name="slamPlotter" pkg="ekf_slam_pkg" type="slamPlotter.py" output="screen"> </node>
+  <node name="SendGoal" pkg="ekf_slam_pkg" type="SendGoal.py" output="screen"> </node>
   <!-- <node name="MoveRobot" pkg="ekf_slam_pkg" type="moveRobotWithVel.py" output="screen" required="true"> </node> -->
   
 

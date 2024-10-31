@@ -20,14 +20,13 @@ class EKFSLAM:
         self.covariance = np.zeros((3, 3))
         self.num_landmarks = 0 
         self.state = np.eye(3)
-        self.alpha = 10
-
+        self.alpha = 3
         self.F_x = np.eye(3)
         
         self.oldSignature = np.eye(2)
         
-        self.process_noise = np.array([[np.power(config['process_noise'],2),0,0],[0, np.power(config['process_noise'],2),0], [0, 0, np.power(config['process_noise'],2)]]) 
-        self.measurement_noise = np.array([[np.power(config['measurement_noise'],2),0],[0, np.power(config['measurement_noise'],2)]])
+        self.process_noise = np.array([[np.power(config['process_noise_linear'],2),0,0],[0, np.power(config['process_noise_linear'],2),0], [0, 0, np.power(config['process_noise_angular'],2)]]) 
+        self.measurement_noise = np.array([[np.power(config['measurement_noise_range'],2),0],[0, np.power(config['measurement_noise_bearing'],2)]])
         # self.measurement_noise = np.array([[np.power(0.4,2),0],[0, np.power(0.4,2)]])
 
 
@@ -159,7 +158,7 @@ class EKFSLAM:
             tempCovariance = np.zeros((n + 2, n + 2))
             tempCovariance[:n, :n] = self.covariance
             
-            initial_landmark_uncertainty = 0.05
+            initial_landmark_uncertainty = 0.1
 
             tempCovariance[n:, n:] = np.array([[initial_landmark_uncertainty, 0],
                                             [0, initial_landmark_uncertainty]])
@@ -240,13 +239,13 @@ class EKFSLAM:
                 # rospy.loginfo(f"\n ADDING NEW LANDMARK at obs {observation_counter}, landmark {landmark_counter}")
 
                 # Update state vector to include the new landmark
-                # self.state = tempState
-                # self.covariance = tempCovariance
+                self.state = tempState
+                self.covariance = tempCovariance
 
                 # # Update the number of landmarks
-                # self.num_landmarks = temp_num_landmarks
+                self.num_landmarks = temp_num_landmarks
                 
-                new_landmarks.append(new_landmark)
+                # new_landmarks.append(new_landmark)
                 
                 measurement_residual_forJson = z_i - z_hat_list[best_landmark_index]
                 measurement_residual_forJson[1] = self.utils.normalize_angle(measurement_residual_forJson[1])
@@ -320,13 +319,13 @@ class EKFSLAM:
                 
         # end of observation loop
         
-        for new_landmark_data in new_landmarks:
-            self.state = np.vstack((self.state, new_landmark_data.reshape(2, 1)))
-            self.num_landmarks += 1
-            temp_covariance = np.zeros((self.covariance.shape[0] + 2, self.covariance.shape[1] + 2))
-            temp_covariance[:self.covariance.shape[0], :self.covariance.shape[1]] = self.covariance
-            temp_covariance[-2:, -2:] = np.array([[initial_landmark_uncertainty, 0], [0, initial_landmark_uncertainty]])
-            self.covariance = temp_covariance
+        # for new_landmark_data in new_landmarks:
+        #     self.state = np.vstack((self.state, new_landmark_data.reshape(2, 1)))
+        #     self.num_landmarks += 1
+        #     temp_covariance = np.zeros((self.covariance.shape[0] + 2, self.covariance.shape[1] + 2))
+        #     temp_covariance[:self.covariance.shape[0], :self.covariance.shape[1]] = self.covariance
+        #     temp_covariance[-2:, -2:] = np.array([[initial_landmark_uncertainty, 0], [0, initial_landmark_uncertainty]])
+        #     self.covariance = temp_covariance
         
         correction_data["correction"]["final_state"] = self.state.tolist()
         correction_data["correction"]["final_covariance"] = self.covariance.tolist()

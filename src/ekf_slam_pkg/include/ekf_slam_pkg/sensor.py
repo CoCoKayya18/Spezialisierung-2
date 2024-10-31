@@ -139,7 +139,7 @@ class Sensor:
                     corners.append(cluster_points[i])
         return corners
 
-    def detect_corners_by_triplet(self, cluster_points, distance_threshold=0.03):
+    def detect_corners_by_triplet(self, cluster_points, distance_threshold=0.04):
         corners = []
         for i in range(1, len(cluster_points) - 1):
             p1, p2, p3 = cluster_points[i - 1], cluster_points[i], cluster_points[i + 1]

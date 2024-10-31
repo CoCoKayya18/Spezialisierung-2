@@ -24,8 +24,10 @@ def main_loop():
     config = {
         'initial_position': rospy.get_param("robot/initial_position"),
         'sensor_noise': rospy.get_param("sensor/noise"),
-        'process_noise': rospy.get_param("ekf/process_noise"),
-        'measurement_noise': rospy.get_param("ekf/measurement_noise")
+        'process_noise_linear': rospy.get_param("ekf/process_noise_linear"),
+        'process_noise_angular': rospy.get_param("ekf/process_noise_angular"),
+        'measurement_noise_range': rospy.get_param("ekf/measurement_noise_range"),
+        'measurement_noise_bearing': rospy.get_param("ekf/measurement_noise_bearing")
     }
     
     map = Map(config)

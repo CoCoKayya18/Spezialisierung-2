@@ -9,5 +9,7 @@ sensor:
   noise: 0.1
 
 ekf:
-  process_noise: 0.001
-  measurement_noise: 0.5
+  process_noise_linear: 0.01
+  process_noise_angular: 0.08
+  measurement_noise_range: 0.15
+  measurement_noise_bearing: 0.35
