@@ -87,7 +87,7 @@ class EKFSLAM:
 
     def correct(self, scanMessage, currentStateVector, currentCovarianceMatrix):
 
-        rospy.loginfo(f"\n === CORRECTION {self.correctionCounter} BEGINNING ====== CORRECTION {self.correctionCounter} BEGINNING ======")
+        # rospy.loginfo(f"\n === CORRECTION {self.correctionCounter} BEGINNING ====== CORRECTION {self.correctionCounter} BEGINNING ======")
 
         # start_time = time.time()
 

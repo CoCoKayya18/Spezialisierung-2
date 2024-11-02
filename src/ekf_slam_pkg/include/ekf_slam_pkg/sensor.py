@@ -672,7 +672,7 @@ class Sensor:
         phi = atan2(y, x)
         return (r, phi)
 
-    def filter_close_corners(self, corners, min_distance=0.4):
+    def filter_close_corners(self, corners, min_distance=0.5):
         if len(corners) == 0:
             return corners
 

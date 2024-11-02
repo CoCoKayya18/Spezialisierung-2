@@ -6,10 +6,7 @@ import os
 import shutil
 
 def clear_directory(directory_path):
-    """
-    Clears all files in the specified directory.
-    If the directory doesn't exist, it will create it.
-    """
+
     if os.path.exists(directory_path):
         # If the directory exists, delete all its contents
         for filename in os.listdir(directory_path):
@@ -136,9 +133,9 @@ def plot_state_updates_per_correction(data, save_dir, threshold=0.03):
         plt.close()
 
         # Print the sum of all updates for reference in the console
-        print("Sum of all state updates:", sum_of_updates)
-    else:
-        print("No state updates available for plotting.")
+        # print("Sum of all state updates:", sum_of_updates)
+    # else:
+    #     print("No state updates available for plotting.")
 
     # Plot high state updates (first three entries only)
     if high_state_updates:
@@ -159,11 +156,11 @@ def plot_state_updates_per_correction(data, save_dir, threshold=0.03):
         plt.close()
 
         # Print high state update indices for reference in the console
-        print("High state updates (correction step, observation ID, landmark ID):")
-        for high_update in high_state_update_indices:
-            print(high_update)
-    else:
-        print("No high state updates found.")
+        # print("High state updates (correction step, observation ID, landmark ID):")
+        # for high_update in high_state_update_indices:
+            # print(high_update)
+    # else:
+    #     print("No high state updates found.")
     
 # Function to visualize summed state updates (x, y, theta) over time
 def plot_summed_state_updates_per_correction(data, save_dir, threshold=0.03):
@@ -235,9 +232,9 @@ def plot_summed_state_updates_per_correction(data, save_dir, threshold=0.03):
         plt.close()
 
         # Print the sum of all updates for reference in the console
-        print("Sum of all state updates (x, y, theta):", sum_of_updates)
-    else:
-        print("No state updates available for plotting.")
+    #     print("Sum of all state updates (x, y, theta):", sum_of_updates)
+    # else:
+    #     print("No state updates available for plotting.")
 
     # Plot high state updates (first three entries only)
     if high_state_updates:
@@ -259,11 +256,11 @@ def plot_summed_state_updates_per_correction(data, save_dir, threshold=0.03):
         plt.close()
 
         # Print high state update indices for reference in the console
-        print("High state updates (correction step, total state update):")
-        for high_update in high_state_update_indices:
-            print(high_update)
-    else:
-        print("No high state updates found.")
+    #     print("High state updates (correction step, total state update):")
+    #     for high_update in high_state_update_indices:
+    #         print(high_update)
+    # else:
+    #     print("No high state updates found.")
 
 
 # Function to extract the robot's estimated path and save the plot
@@ -441,9 +438,9 @@ def plot_residuals_matched(data, save_dir):
     plt.close()
 
     # Output high residual indices
-    print("Indices of high residuals (correction step, observation ID):")
-    for index in high_residual_indices:
-        print(index)
+    # print("Indices of high residuals (correction step, observation ID):")
+    # for index in high_residual_indices:
+    #     print(index)
 
 
 # Function to track covariance matrix growth and save the plot
@@ -656,7 +653,7 @@ def plot_pi_values(data, save_dir):
     plt.savefig(os.path.join(save_dir, 'pi_values.png'))
     plt.close()
 
-    print(f"Pi values plot saved in {save_dir}")
+    # print(f"Pi values plot saved in {save_dir}")
     
 def visualize_ransac_from_json(data, save_dir):
     """
@@ -742,7 +739,7 @@ def find_high_bearing_error(data, threshold=1.0):
                         "bearing_residual": bearing_residual
                     })
     
-    print(f"High errors: {high_error_measurements}")
+    # print(f"High errors: {high_error_measurements}")
 
 # Main function to run all analysis
 def analyze_ekf_slam(file_path, output_dir):
@@ -778,21 +775,45 @@ def analyze_ekf_slam(file_path, output_dir):
     
     plot_state_after_corrections(data, output_dir)
     
-    plot_pi_values(data, output_dir)
+    # plot_pi_values(data, output_dir)
     
-    analyze_anomaly_step(data, 45)
+    # analyze_anomaly_step(data, 45)
     
-    find_high_bearing_error(data, threshold=0.5)
+    # find_high_bearing_error(data, threshold=0.5)
     
     # visualize_ransac_from_json(data, output_dir)
 
     print(f'Analysis complete. Plots saved in {output_dir}')
 
-# Example usage
+def get_current_run_id(counter_file_path):
+    if not os.path.exists(counter_file_path):
+        # Initialize the counter file with a run_id of 1 if it doesn't exist
+        with open(counter_file_path, "w") as file:
+            file.write("1")
+        return 1
+
+    # Read the current run_id from the file
+    with open(counter_file_path, "r") as file:
+        run_id = int(file.read().strip())
+    return run_id
+
 if __name__ == "__main__":
-    # Define file paths
-    json_file_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/correction_data.json'  
-    output_directory = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/correctionAnalysisOutput'
+    # Define the base paths
+    base_data_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data'
+    base_output_directory = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/correctionAnalysisOutput'
+    counter_file_path = os.path.join(base_data_path, "run_counter.txt")
+
+    # Get the current run ID
+    run_id = get_current_run_id(counter_file_path)
+
+    # Define file paths with run_id
+    json_file_path = os.path.join(base_data_path, f'correction_data_run_{run_id}.json')
+    output_directory = os.path.join(base_output_directory, f'run_{run_id}')
+    
+    clear_directory(output_directory)
+
+    # Ensure the output directory exists
+    os.makedirs(output_directory, exist_ok=True)
 
     # Run the analysis
     analyze_ekf_slam(json_file_path, output_directory)

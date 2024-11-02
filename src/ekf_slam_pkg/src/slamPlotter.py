@@ -4,6 +4,7 @@ import rospy
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from scipy.spatial import distance_matrix
 from nav_msgs.msg import Odometry
 from visualization_msgs.msg import Marker
 from std_msgs.msg import Float64MultiArray
@@ -12,6 +13,9 @@ import numpy as np
 import psutil
 import time
 import csv
+from scipy.stats import kstest, ttest_rel, wilcoxon, t
+import scipy.stats as st
+import pandas as pd 
 
 class SLAMPlotter:
     
@@ -20,31 +24,35 @@ class SLAMPlotter:
 
         # Subscribers
         self.ground_truth_sub = rospy.Subscriber('/ground_truth/state', Odometry, self.ground_truth_callback)
-        self.ekf_path_sub = rospy.Subscriber('/EKF_Path', Marker, self.ekf_path_callback)
+        self.ekf_state_sub = rospy.Subscriber('/EKF_State', Odometry, self.ekf_state_callback)
         self.landmark_sub = rospy.Subscriber('/slam_map', Marker, self.landmark_callback)
-        self.covariance_sub = rospy.Subscriber('/slam_covariance', Float64MultiArray, self.covariance_callback)
+        # self.covariance_sub = rospy.Subscriber('/slam_covariance', Float64MultiArray, self.covariance_callback)
 
-        # Storage for paths, landmarks, and covariance
+        # Storage for paths, landmarks, and covariance with timestamps
         self.ground_truth_positions = []
+        self.ground_truth_times = []
         self.ekf_positions = []
+        self.ekf_times = []
         self.landmarks = []
         self.covariances_x = []
         self.covariances_y = []
         self.covariances_theta = []
 
+        # Load ground truth landmark positions from CSV
+        self.ground_truth_landmarks = self.load_ground_truth_landmarks()
+        
         # Resource usage tracking
         self.memory_usage = []
         self.cpu_usage = []
 
-        # Tracking for metrics
-        self.start_time = rospy.Time.now().to_sec()
-        self.cumulative_distance = 0.0
-
         # Root path for all runs
-        self.base_path = "/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/slamPlotterEvaluationPlots"
+        self.base_path = "/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/slamPlotterEvaluationPlots"
         if not os.path.exists(self.base_path):
             os.makedirs(self.base_path)
 
+        # CSV for metrics for all runs
+        self.evaluation_csv = os.path.join(self.base_path, "SlamPlotterEvaluation.csv")
+        
         # Initialize run ID
         self.run_id = self.get_next_run_id()
         self.run_path = os.path.join(self.base_path, f"Run_{self.run_id}")
@@ -54,18 +62,16 @@ class SLAMPlotter:
         rospy.on_shutdown(self.save_plots_and_metrics)
         
     def track_resources(self):
-
         self.memory_usage.append(psutil.virtual_memory().percent)
         self.cpu_usage.append(psutil.cpu_percent(interval=None))
 
     def get_next_run_id(self):
-        """Read the current run ID from file and increment it for the next run."""
+
         counter_file = os.path.join(self.base_path, "run_counter.txt")
-        if os.path.exists(counter_file):
-            with open(counter_file, "r") as file:
-                run_id = int(file.read().strip()) + 1
-        else:
-            run_id = 1
+        
+        with open(counter_file, "r") as file:
+            run_id = int(file.read().strip()) + 1
+        
         # Save the incremented run_id back to file
         with open(counter_file, "w") as file:
             file.write(str(run_id))
@@ -74,15 +80,17 @@ class SLAMPlotter:
     def ground_truth_callback(self, msg):
         position = (msg.pose.pose.position.x, msg.pose.pose.position.y)
         self.ground_truth_positions.append(position)
+        self.ground_truth_times.append(msg.header.stamp.to_sec())
 
-    def ekf_path_callback(self, msg):
-        position = (msg.pose.position.x, msg.pose.position.y)
+    def ekf_state_callback(self, msg):
+        position = (msg.pose.pose.position.x, msg.pose.pose.position.y)
         self.ekf_positions.append(position)
-        if len(self.ekf_positions) > 1:
-            # Update cumulative distance
-            prev_position = np.array(self.ekf_positions[-2])
-            current_position = np.array(self.ekf_positions[-1])
-            self.cumulative_distance += np.linalg.norm(current_position - prev_position)
+        self.ekf_times.append(msg.header.stamp.to_sec())
+        
+        if len(msg.pose.covariance) >= 9:  # Ensure that covariance data is available
+            self.covariances_x.append(msg.pose.covariance[0])      # Variance of x
+            self.covariances_y.append(msg.pose.covariance[7])      # Variance of y
+            self.covariances_theta.append(msg.pose.covariance[35]) # Variance of theta
 
     def landmark_callback(self, msg):
         for point in msg.points:
@@ -96,7 +104,16 @@ class SLAMPlotter:
             self.covariances_theta.append(msg.data[8])  # Variance of theta
 
     def calculate_ate(self):
-        errors = [np.linalg.norm(np.array(gt) - np.array(ekf)) for gt, ekf in zip(self.ground_truth_positions, self.ekf_positions)]
+        aligned_ground_truth = []
+        aligned_ekf_positions = []
+        
+        # Align ground truth and EKF positions by closest timestamps
+        for gt_time, gt_pos in zip(self.ground_truth_times, self.ground_truth_positions):
+            closest_ekf_idx = min(range(len(self.ekf_times)), key=lambda i: abs(self.ekf_times[i] - gt_time))
+            aligned_ground_truth.append(gt_pos)
+            aligned_ekf_positions.append(self.ekf_positions[closest_ekf_idx])
+
+        errors = [np.linalg.norm(np.array(gt) - np.array(ekf)) for gt, ekf in zip(aligned_ground_truth, aligned_ekf_positions)]
         ate = np.sqrt(np.mean(np.square(errors)))
         return ate, errors
 
@@ -108,21 +125,80 @@ class SLAMPlotter:
             rpe_errors.append(np.linalg.norm(gt_delta - ekf_delta))
         rpe = np.sqrt(np.mean(np.square(rpe_errors)))
         return rpe, rpe_errors
+    
+    def calculate_rmse(self):
+        aligned_ground_truth = []
+        aligned_ekf_positions = []
+        
+        for gt_time, gt_pos in zip(self.ground_truth_times, self.ground_truth_positions):
+            closest_ekf_idx = min(range(len(self.ekf_times)), key=lambda i: abs(self.ekf_times[i] - gt_time))
+            aligned_ground_truth.append(gt_pos)
+            aligned_ekf_positions.append(self.ekf_positions[closest_ekf_idx])
 
-    def save_metrics_to_csv(self, ate, rpe):
-        """Save metrics to a CSV file in the run-specific directory."""
-        csv_file = os.path.join(self.run_path, f"Run_{self.run_id}_Metrics.csv")
-        with open(csv_file, mode='w', newline='') as file:
+        squared_errors = [(np.array(gt) - np.array(ekf)) ** 2 for gt, ekf in zip(aligned_ground_truth, aligned_ekf_positions)]
+        rmse = np.sqrt(np.mean([np.sum(error) for error in squared_errors]))
+        return rmse
+    
+    def calculate_nees(self):
+        nees_values = []
+        for gt, ekf, cov_x, cov_y in zip(self.ground_truth_positions, self.ekf_positions, self.covariances_x, self.covariances_y):
+            error = np.array(gt) - np.array(ekf)
+            nees = (error[0]**2 / cov_x) + (error[1]**2 / cov_y)
+            nees_values.append(nees)
+        mean_nees = np.mean(nees_values)
+        std_nees = np.std(nees_values)
+        return mean_nees, std_nees
+    
+    def error_distribution_analysis(self):
+        x_errors = [gt[0] - ekf[0] for gt, ekf in zip(self.ground_truth_positions, self.ekf_positions)]
+        y_errors = [gt[1] - ekf[1] for gt, ekf in zip(self.ground_truth_positions, self.ekf_positions)]
+        
+        plt.hist(x_errors, bins=30, alpha=0.5, label='X Errors')
+        plt.hist(y_errors, bins=30, alpha=0.5, label='Y Errors')
+        plt.legend()
+        plt.title("Error Distribution")
+        plt.savefig(os.path.join(self.run_path, f"Run_{self.run_id}_Error_Distribution.png"))
+        plt.close()
+        
+        ks_x = kstest(x_errors, 'norm')
+        ks_y = kstest(y_errors, 'norm')
+        return ks_x, ks_y
+    
+    def confidence_interval_analysis(self, metric_values):
+        mean_metric = np.mean(metric_values)
+        confidence_interval = st.t.interval(0.95, len(metric_values)-1, loc=mean_metric, scale=st.sem(metric_values))
+        return mean_metric, confidence_interval
+    
+    def significance_test(self):
+        errors = [np.linalg.norm(np.array(gt) - np.array(ekf)) for gt, ekf in zip(self.ground_truth_positions, self.ekf_positions)]
+        t_stat, p_value = ttest_rel(errors, np.zeros(len(errors)))
+        w_stat, p_value_wilcoxon = wilcoxon(errors)
+        return (t_stat, p_value), (w_stat, p_value_wilcoxon)
+        
+    def load_ground_truth_landmarks(self):
+
+        gt_landmark_file = "/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/features/cornerGroundTruthPositions.csv"
+        try:
+            return pd.read_csv(gt_landmark_file)[['X', 'Y']].values
+        except Exception as e:
+            rospy.logerr(f"Error loading ground truth landmarks: {e}")
+            return []
+
+    def save_metrics_to_csv(self, ate, mean_ate, ci_ate, rpe, mean_rpe, ci_rpe, rmse, mean_nees, std_nees, ks_x, ks_y, significance_t, significance_w):
+        
+        # Check if the evaluation CSV exists, and add headers if it doesn't
+        file_exists = os.path.isfile(self.evaluation_csv)
+        file_is_empty = os.path.getsize(self.evaluation_csv) == 0 if file_exists else True
+
+        with open(self.evaluation_csv, mode='a', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(["Metric", "Value"])
-            writer.writerow(["ATE", ate])
-            writer.writerow(["RPE", rpe])
-            writer.writerow(["Cumulative Distance", self.cumulative_distance])
-            writer.writerow(["Average CPU Usage", np.mean(self.cpu_usage)])
-            writer.writerow(["Average Memory Usage", np.mean(self.memory_usage)])
+            if file_is_empty:
+                # Write the header if the file is new
+                writer.writerow(["Run_ID", "ATE", "Mean_ATE", "CI_ATE", "RPE", "Mean_RPE", "Mean_CI", "RMSE", "Mean_NEES", "Std_Nees", "Kolmogorov-Smirnov test (X errors)", "Kolmogorov-Smirnov test (Y errors)", "T-test", "Wilcoxon signed-rank test", "Average_CPU_Usage", "Average_Memory_Usage"])
+            # Write the metrics for the current run
+            writer.writerow([self.run_id, ate, mean_ate, ci_ate, rpe, mean_rpe, ci_rpe, rmse, mean_nees, std_nees, ks_x, ks_y, significance_t, significance_w, np.mean(self.cpu_usage), np.mean(self.memory_usage)])
 
     def save_plots_and_metrics(self):
-        """Generates and saves performance metrics and plots upon shutdown"""
 
         # Track final CPU and memory usage
         self.track_resources()
@@ -130,21 +206,30 @@ class SLAMPlotter:
         # Calculate metrics
         ate, ate_errors = self.calculate_ate()
         rpe, rpe_errors = self.calculate_rpe()
+        rmse = self.calculate_rmse()
+        mean_nees, std_nees = self.calculate_nees()
+        ks_x, ks_y = self.error_distribution_analysis()
+        significance_t, significance_w = self.significance_test()
+        mean_ate, ci_ate = self.confidence_interval_analysis(ate_errors)
+        mean_rpe, ci_rpe = self.confidence_interval_analysis(rpe_errors)
 
-        # Save metrics to CSV
-        self.save_metrics_to_csv(ate, rpe)
+        # Append metrics to the combined evaluation CSV
+        self.save_metrics_to_csv(ate, mean_ate, ci_ate, rpe, mean_rpe, ci_rpe, rmse, mean_nees, std_nees, ks_x, ks_y, significance_t, significance_w)
         
         # Plot Ground Truth and EKF paths
         plt.figure(figsize=(10, 6))
         if self.ground_truth_positions:
             gt_x, gt_y = zip(*self.ground_truth_positions)
             plt.plot(gt_x, gt_y, 'g-', label="Ground Truth Path")
+            
         if self.ekf_positions:
             ekf_x, ekf_y = zip(*self.ekf_positions)
-            plt.plot(ekf_x, ekf_y, 'r--', label="EKF Path")
+            plt.plot(ekf_x, ekf_y, 'r-', label="EKF Path")
+            
         if self.landmarks:
             lm_x, lm_y = zip(*self.landmarks)
             plt.scatter(lm_x, lm_y, c='b', marker='o', label="Landmarks")
+            
         plt.xlabel("X Position (meters)")
         plt.ylabel("Y Position (meters)")
         plt.title("Comparison of Ground Truth Path, EKF Path, and Landmarks")
@@ -201,8 +286,13 @@ class SLAMPlotter:
         # Log results
         rospy.loginfo(f"ATE: {ate}")
         rospy.loginfo(f"RPE: {rpe}")
-        rospy.loginfo(f"Cumulative Distance Travelled: {self.cumulative_distance}")
-        rospy.loginfo("All plots and metrics saved in the run-specific folder.")
+        rospy.loginfo(f"RMSE: {rmse}")
+        rospy.loginfo(f"NEES: {mean_nees}")
+        rospy.loginfo(f"Kolmogorov-Smirnov test (X errors): {ks_x}")
+        rospy.loginfo(f"Kolmogorov-Smirnov test (Y errors): {ks_y}")
+        rospy.loginfo(f"T-test: {significance_t}")
+        rospy.loginfo(f"Wilcoxon signed-rank test: {significance_w}")
+
 
     def run(self):
         rate = rospy.Rate(1)  # 1 Hz

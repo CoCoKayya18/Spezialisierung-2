@@ -43,7 +43,7 @@ class Robot:
         self.EKF_path_pub = rospy.Publisher('/EKF_Path', Marker, queue_size=10)
         self.map_pub = rospy.Publisher('/slam_map', Marker, queue_size=10)
         self.covariance_pub = rospy.Publisher('/slam_covariance', Float64MultiArray, queue_size=10)
-        # self.pose_array_pub = rospy.Publisher("/ekf_pose_array", PoseArray, queue_size=10)
+        self.ekf_state_pub = rospy.Publisher('/EKF_State', Odometry, queue_size=10)
         
         self.current_pose = None    
         self.current_vel = np.zeros((3, 1))
@@ -56,9 +56,10 @@ class Robot:
 
         ground_truth_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ground_truth_path.csv'
         ekf_path_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ekf_path.csv'
-        odom_velocities_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/odom_veloc ities.csv'
+        odom_velocities_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/odom_velocities.csv'
+        corner_ground_truth_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/corner_ground_truth.csv'
         
-        self.utils.clear_json_file("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/correctionData.json")
+        # self.utils.clear_json_file("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/correctionData.json")
 
         # Clear the plot directories
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/Covariance_Plots")
@@ -73,13 +74,17 @@ class Robot:
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/RansacLinesInIteration")
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/Circle_Classification")
         self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/plots/RansacCircleIteration")
-        self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data")
+        # self.utils.clear_directory("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data")
 
         self.last_predict_time = time.time()
         self.last_correct_time = time.time()
 
         # Initialize CSV files with headers
         self.utils.initialize_csv_files(ground_truth_csv_path, ekf_path_csv_path, odom_velocities_csv_path)
+        
+        jsonPath = "/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/correction_data.json"
+        
+        # self.utils.initialize_json_file(jsonPath)
         
         self.correctionCounter = 1
         
@@ -109,6 +114,8 @@ class Robot:
             self.publish_EKF_path(self.state, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
             
             self.publish_covariance()
+            
+            self.publish_state()
             
             end_execution_time = time.time()
             # rospy.loginfo(f"odom_callback runtime: {end_execution_time - start_execution_time:.4f} seconds")
@@ -169,6 +176,8 @@ class Robot:
             self.publish_EKF_path(self.state, "ekf_path", [0.0, 0.0, 1.0])  # Blue path
             
             self.publish_covariance()
+            
+            self.publish_state()
             
             end_execution_time = time.time()
             # rospy.loginfo(f"scan_callback runtime: {end_execution_time - start_execution_time:.4f} seconds")
@@ -318,3 +327,27 @@ class Robot:
 
         # Publish the covariance matrix
         self.covariance_pub.publish(covariance_msg)
+        
+    def publish_state(self):
+
+        robot_state = self.state
+        
+        ekf_odom_msg = Odometry()
+        ekf_odom_msg.header.stamp = rospy.Time.now()
+        ekf_odom_msg.header.frame_id = "map"
+        
+        # Set the position and orientation
+        ekf_odom_msg.pose.pose.position.x = self.state[0].item() if isinstance(self.state[0], np.ndarray) else self.state[0]
+        ekf_odom_msg.pose.pose.position.y = self.state[1].item() if isinstance(self.state[1], np.ndarray) else self.state[1]
+        theta = self.state[2].item() if isinstance(self.state[2], np.ndarray) else self.state[2]
+        ekf_odom_msg.pose.pose.orientation.z = np.sin(theta / 2.0)
+        ekf_odom_msg.pose.pose.orientation.w = np.cos(theta / 2.0)
+        
+        flattened_covariance = np.zeros(36)
+        flattened_covariance[:9] = self.covariance[:3, :3].flatten()  # Top-left 3x3 block for (x, y, theta)
+
+        # Assign flattened covariance to the Odometry message
+        ekf_odom_msg.pose.covariance = flattened_covariance.tolist()
+        
+        # Publish the message
+        self.ekf_state_pub.publish(ekf_odom_msg)
