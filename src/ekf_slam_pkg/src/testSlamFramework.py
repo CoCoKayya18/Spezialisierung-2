@@ -10,6 +10,15 @@ def run_corner_extraction_script(script_path):
     print("Running corner extraction script...")
     subprocess.run(['python3', script_path], check=True)
     print("Corner extraction completed.")
+    
+def run_metrics_analysis():
+    print("Running metrics analysis...")
+    analysis_script = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/src/metricsAnalysis.py'
+    try:
+        subprocess.run(['python3', analysis_script], check=True)
+        print("Metrics analysis completed.")
+    except Exception as e:
+        print(f"Failed to run metrics analysis: {e}")
 
 def clear_directory(directory):
     files = glob.glob(f"{directory}/*")
@@ -53,6 +62,19 @@ def clear_folder_and_reset_file(folder_path, text_file_path):
             print(f"Failed to clear {evaluation_csv}: {e}")
     else:
         print(f"CSV file path {evaluation_csv} does not exist.")
+        
+    # Delete all image files in the folder
+    image_files = glob.glob(os.path.join(folder_path, "*.png")) + \
+                  glob.glob(os.path.join(folder_path, "*.jpg")) + \
+                  glob.glob(os.path.join(folder_path, "*.jpeg")) + \
+                  glob.glob(os.path.join(folder_path, "*.gif")) + \
+                  glob.glob(os.path.join(folder_path, "*.bmp"))
+    for image_file in image_files:
+        try:
+            os.remove(image_file)
+            print(f"Deleted image file: {image_file}")
+        except Exception as e:
+            print(f"Failed to delete image file {image_file}: {e}")
 
 def run_slam_pipeline(launch_file, folder_path, text_file_path, runs=10, delay=5):
     
@@ -71,7 +93,7 @@ def run_slam_pipeline(launch_file, folder_path, text_file_path, runs=10, delay=5
         process = subprocess.Popen(['roslaunch'] + launch_file.split())
         
         # Wait for the SLAM pipeline to complete (adjust based on your pipeline's duration)
-        time.sleep(480)  # Adjust duration as needed
+        time.sleep(200)  # Adjust duration as needed
         
         # Stop the ROS process
         process.terminate()
@@ -81,10 +103,12 @@ def run_slam_pipeline(launch_file, folder_path, text_file_path, runs=10, delay=5
         
         # Wait before restarting, if necessary
         time.sleep(delay)
+    
+    run_metrics_analysis()
 
 # Example usage
 launch_file = 'ekf_slam_pkg run_slam.launch'
 folder_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/slamPlotterEvaluationPlots'
 text_file_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/slamPlotterEvaluationPlots/run_counter.txt'
 
-run_slam_pipeline(launch_file, runs=10, delay=5, folder_path=folder_path, text_file_path=text_file_path)
+run_slam_pipeline(launch_file, runs=15, delay=5, folder_path=folder_path, text_file_path=text_file_path)

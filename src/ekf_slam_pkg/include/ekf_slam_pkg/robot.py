@@ -57,7 +57,6 @@ class Robot:
         ground_truth_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ground_truth_path.csv'
         ekf_path_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/ekf_path.csv'
         odom_velocities_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/odom_velocities.csv'
-        corner_ground_truth_csv_path = '/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/corner_ground_truth.csv'
         
         # self.utils.clear_json_file("/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/data/correctionData.json")
 
@@ -155,10 +154,10 @@ class Robot:
             # Start timing for this callback execution (optional, if you also want execution time)
             start_execution_time = time.time()
             
-            ekf_predicted_pose, ekf_predicted_covariance = self.ekf_slam.predict(self.current_vel, self.state, self.covariance, self.num_landmarks)  # Run the EKF prediction
+            # ekf_predicted_pose, ekf_predicted_covariance = self.ekf_slam.predict(self.current_vel, self.state, self.covariance, self.num_landmarks)  # Run the EKF prediction
 
-            self.state = ekf_predicted_pose
-            self.covariance = ekf_predicted_covariance
+            # self.state = ekf_predicted_pose
+            # self.covariance = ekf_predicted_covariance
 
             self.scan_message = transformed_scan
         
@@ -211,7 +210,8 @@ class Robot:
             (0, 0, 0),         
             quaternion,  
             rospy.Time.now(),   # Current time
-            "odom",        # Child frame
+            # "odom",        # Child frame
+            "base_link"
             "map"              # Parent frame
         )
 

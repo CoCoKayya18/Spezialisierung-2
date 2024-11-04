@@ -1,6 +1,6 @@
 robot:  
   initial_position:
-    x: 0.0
+    x: -2.0
     y: 0.0
     z: 0.0
     theta: 0
@@ -11,5 +11,5 @@ sensor:
 ekf:
   process_noise_linear: 0.01
   process_noise_angular: 0.08
-  measurement_noise_range: 0.14
-  measurement_noise_bearing: 0.3
+  measurement_noise_range: 0.13
+  measurement_noise_bearing: 0.25

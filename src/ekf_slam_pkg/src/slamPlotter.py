@@ -32,6 +32,8 @@ class SLAMPlotter:
         self.ground_truth_positions = []
         self.ground_truth_times = []
         self.ekf_positions = []
+        self.aligned_ground_truth = []
+        self.aligned_ekf_positions = []
         self.ekf_times = []
         self.landmarks = []
         self.covariances_x = []
@@ -50,11 +52,13 @@ class SLAMPlotter:
         if not os.path.exists(self.base_path):
             os.makedirs(self.base_path)
 
-        # CSV for metrics for all runs
-        self.evaluation_csv = os.path.join(self.base_path, "SlamPlotterEvaluation.csv")
-        
         # Initialize run ID
         self.run_id = self.get_next_run_id()
+        
+        # CSV for metrics for all runs
+        self.evaluation_csv = os.path.join(self.base_path, "SlamPlotterEvaluation.csv")
+        self.nees_csv = os.path.join(self.base_path, f"Run_{self.run_id}/Run_{self.run_id}__NEES_values.csv")
+        
         self.run_path = os.path.join(self.base_path, f"Run_{self.run_id}")
         os.makedirs(self.run_path)
 
@@ -84,69 +88,88 @@ class SLAMPlotter:
 
     def ekf_state_callback(self, msg):
         position = (msg.pose.pose.position.x, msg.pose.pose.position.y)
+        timestamp = msg.header.stamp.to_sec()
         self.ekf_positions.append(position)
-        self.ekf_times.append(msg.header.stamp.to_sec())
-        
+        self.ekf_times.append(timestamp)
+
+        # Find the closest ground truth position based on timestamp
+        closest_gt_idx = min(range(len(self.ground_truth_times)), key=lambda i: abs(self.ground_truth_times[i] - timestamp))
+        closest_gt_position = self.ground_truth_positions[closest_gt_idx]
+
+        # Align the ground truth and EKF positions
+        self.aligned_ground_truth.append(closest_gt_position)
+        self.aligned_ekf_positions.append(position)
+
         if len(msg.pose.covariance) >= 9:  # Ensure that covariance data is available
             self.covariances_x.append(msg.pose.covariance[0])      # Variance of x
-            self.covariances_y.append(msg.pose.covariance[7])      # Variance of y
-            self.covariances_theta.append(msg.pose.covariance[35]) # Variance of theta
+            self.covariances_y.append(msg.pose.covariance[4])      # Variance of y
+            self.covariances_theta.append(msg.pose.covariance[8])  # Variance of theta
 
     def landmark_callback(self, msg):
         for point in msg.points:
             position = (point.x, point.y)
             self.landmarks.append(position)
 
-    def covariance_callback(self, msg):
-        if len(msg.data) == 9:
-            self.covariances_x.append(msg.data[0])      # Variance of x
-            self.covariances_y.append(msg.data[4])      # Variance of y
-            self.covariances_theta.append(msg.data[8])  # Variance of theta
-
     def calculate_ate(self):
-        aligned_ground_truth = []
-        aligned_ekf_positions = []
-        
-        # Align ground truth and EKF positions by closest timestamps
-        for gt_time, gt_pos in zip(self.ground_truth_times, self.ground_truth_positions):
-            closest_ekf_idx = min(range(len(self.ekf_times)), key=lambda i: abs(self.ekf_times[i] - gt_time))
-            aligned_ground_truth.append(gt_pos)
-            aligned_ekf_positions.append(self.ekf_positions[closest_ekf_idx])
-
-        errors = [np.linalg.norm(np.array(gt) - np.array(ekf)) for gt, ekf in zip(aligned_ground_truth, aligned_ekf_positions)]
+        # Use the aligned ground truth and EKF positions for ATE calculation
+        errors = [np.linalg.norm(np.array(gt) - np.array(ekf)) for gt, ekf in zip(self.aligned_ground_truth, self.aligned_ekf_positions)]
         ate = np.sqrt(np.mean(np.square(errors)))
         return ate, errors
 
     def calculate_rpe(self):
         rpe_errors = []
-        for i in range(1, len(self.ground_truth_positions)):
-            gt_delta = np.array(self.ground_truth_positions[i]) - np.array(self.ground_truth_positions[i - 1])
-            ekf_delta = np.array(self.ekf_positions[i]) - np.array(self.ekf_positions[i - 1])
+        # Ensure both lists have enough elements to calculate RPE
+        min_length = min(len(self.aligned_ground_truth), len(self.aligned_ekf_positions))
+        if min_length < 2:
+            rospy.logwarn("Not enough data points to calculate RPE.")
+            return float('nan'), rpe_errors  # Return NaN and an empty list if not enough points
+
+        for i in range(1, min_length):
+            gt_delta = np.array(self.aligned_ground_truth[i]) - np.array(self.aligned_ground_truth[i - 1])
+            ekf_delta = np.array(self.aligned_ekf_positions[i]) - np.array(self.aligned_ekf_positions[i - 1])
             rpe_errors.append(np.linalg.norm(gt_delta - ekf_delta))
-        rpe = np.sqrt(np.mean(np.square(rpe_errors)))
+        
+        rpe = np.sqrt(np.mean(np.square(rpe_errors))) if rpe_errors else float('nan')
         return rpe, rpe_errors
     
     def calculate_rmse(self):
-        aligned_ground_truth = []
-        aligned_ekf_positions = []
-        
-        for gt_time, gt_pos in zip(self.ground_truth_times, self.ground_truth_positions):
-            closest_ekf_idx = min(range(len(self.ekf_times)), key=lambda i: abs(self.ekf_times[i] - gt_time))
-            aligned_ground_truth.append(gt_pos)
-            aligned_ekf_positions.append(self.ekf_positions[closest_ekf_idx])
-
-        squared_errors = [(np.array(gt) - np.array(ekf)) ** 2 for gt, ekf in zip(aligned_ground_truth, aligned_ekf_positions)]
+        squared_errors = [(np.array(gt) - np.array(ekf)) ** 2 for gt, ekf in zip(self.aligned_ground_truth, self.aligned_ekf_positions)]
         rmse = np.sqrt(np.mean([np.sum(error) for error in squared_errors]))
         return rmse
     
+    def save_nees_values(self, nees_values):
+        # Write NEES values to a CSV for this run
+        with open(self.nees_csv, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(["NEES Value"])
+            for value in nees_values:
+                writer.writerow([value])
+    
     def calculate_nees(self):
         nees_values = []
-        for gt, ekf, cov_x, cov_y in zip(self.ground_truth_positions, self.ekf_positions, self.covariances_x, self.covariances_y):
+        
+        for gt, ekf, cov_x, cov_y in zip(self.aligned_ground_truth, self.aligned_ekf_positions, self.covariances_x, self.covariances_y):
             error = np.array(gt) - np.array(ekf)
-            nees = (error[0]**2 / cov_x) + (error[1]**2 / cov_y)
+            
+            # Check for zero covariance values to prevent division by zero
+            if cov_x > 0 and cov_y > 0:
+                # Only calculate NEES if both cov_x and cov_y are positive
+                nees = (error[0]**2 / cov_x) + (error[1]**2 / cov_y)
+            else:
+                # If cov_x or cov_y is zero, set NEES to NaN to handle it later
+                nees = float('nan')
+                
             nees_values.append(nees)
-        mean_nees = np.mean(nees_values)
-        std_nees = np.std(nees_values)
+        
+        self.save_nees_values(nees_values)
+        
+        # Filter out NaN or infinite values before calculating the mean and standard deviation
+        valid_nees_values = [value for value in nees_values if np.isfinite(value)]
+        
+        # Calculate mean and standard deviation of valid NEES values
+        mean_nees = np.mean(valid_nees_values) if valid_nees_values else float('nan')
+        std_nees = np.std(valid_nees_values) if valid_nees_values else float('nan')
+        
         return mean_nees, std_nees
     
     def error_distribution_analysis(self):
@@ -216,7 +239,7 @@ class SLAMPlotter:
         # Append metrics to the combined evaluation CSV
         self.save_metrics_to_csv(ate, mean_ate, ci_ate, rpe, mean_rpe, ci_rpe, rmse, mean_nees, std_nees, ks_x, ks_y, significance_t, significance_w)
         
-        # Plot Ground Truth and EKF paths
+        # Plot Ground Truth and EKF paths iwith landmarks
         plt.figure(figsize=(10, 6))
         if self.ground_truth_positions:
             gt_x, gt_y = zip(*self.ground_truth_positions)
@@ -230,9 +253,27 @@ class SLAMPlotter:
             lm_x, lm_y = zip(*self.landmarks)
             plt.scatter(lm_x, lm_y, c='b', marker='o', label="Landmarks")
             
-        plt.xlabel("X Position (meters)")
-        plt.ylabel("Y Position (meters)")
-        plt.title("Comparison of Ground Truth Path, EKF Path, and Landmarks")
+        plt.xlabel("X Position [m]")
+        plt.ylabel("Y Position [m]")
+        plt.title("Comparison of Ground Truth Path and Estimated Path with Landmarks")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(os.path.join(self.run_path, f"Run_{self.run_id}_GT_vs_EKF_path_with_LM.png"))
+        plt.close()
+        
+        # Plot Ground Truth and EKF paths without landmarks
+        plt.figure(figsize=(10, 6))
+        if self.ground_truth_positions:
+            gt_x, gt_y = zip(*self.ground_truth_positions)
+            plt.plot(gt_x, gt_y, 'g-', label="Ground Truth Path")
+            
+        if self.ekf_positions:
+            ekf_x, ekf_y = zip(*self.ekf_positions)
+            plt.plot(ekf_x, ekf_y, 'r-', label="EKF Path")
+            
+        plt.xlabel("X Position [m]")
+        plt.ylabel("Y Position [m]")
+        plt.title("Comparison of Ground Truth Path and Estimated Path")
         plt.legend()
         plt.grid(True)
         plt.savefig(os.path.join(self.run_path, f"Run_{self.run_id}_GT_vs_EKF_path.png"))
@@ -241,33 +282,35 @@ class SLAMPlotter:
         # Plot ATE over time
         plt.figure()
         plt.plot(ate_errors, label="ATE over time")
-        plt.xlabel("Time step")
-        plt.ylabel("Error (meters)")
+        plt.xlabel("Time step [s]")
+        plt.ylabel("Error [m]")
         plt.legend()
         plt.title("Absolute Trajectory Error (ATE) over time")
+        plt.grid(True)
         plt.savefig(os.path.join(self.run_path, f"Run_{self.run_id}_ATE_Over_Time.png"))
         plt.close()
 
         # Plot RPE over time
         plt.figure()
         plt.plot(rpe_errors, label="RPE over time")
-        plt.xlabel("Time step")
-        plt.ylabel("Error (meters)")
+        plt.xlabel("Time step [s]")
+        plt.ylabel("Error [m]")
         plt.legend()
         plt.title("Relative Pose Error (RPE) over time")
+        plt.grid(True)
         plt.savefig(os.path.join(self.run_path, f"Run_{self.run_id}_RPE_Over_Time.png"))
         plt.close()
 
         # Plot state covariance for x, y, and theta separately
         if self.covariances_x and self.covariances_y and self.covariances_theta:
             plt.figure()
-            plt.plot(self.covariances_x, label="Covariance X (Variance of x)")
-            plt.plot(self.covariances_y, label="Covariance Y (Variance of y)")
-            plt.plot(self.covariances_theta, label="Covariance Theta (Variance of theta)")
-            plt.xlabel("Time step")
+            plt.plot(self.covariances_x, label="Variance of x")
+            plt.plot(self.covariances_y, label="Variance of y")
+            plt.plot(self.covariances_theta, label="Variance of theta")
+            plt.xlabel("Time step [s]")
             plt.ylabel("Variance")
             plt.legend()
-            plt.title("State Covariance (Variance of x, y, theta) over time")
+            plt.title("Variance of x, y, theta over time")
             plt.grid(True)
             plt.savefig(os.path.join(self.run_path, f"Run_{self.run_id}_State_Covariance.png"))
             plt.close()
@@ -276,10 +319,11 @@ class SLAMPlotter:
         plt.figure()
         plt.plot(self.memory_usage, label="Memory Usage (%)")
         plt.plot(self.cpu_usage, label="CPU Usage (%)")
-        plt.xlabel("Time step")
-        plt.ylabel("Usage (%)")
+        plt.xlabel("Time step [s]")
+        plt.ylabel("Usage [%]")
         plt.legend()
         plt.title("Memory and CPU Usage over time")
+        plt.grid(True)
         plt.savefig(os.path.join(self.run_path, f"Run_{self.run_id}_Resource_Usage.png"))
         plt.close()
 

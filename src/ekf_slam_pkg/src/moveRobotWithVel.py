@@ -1,76 +1,85 @@
-#!/usr/bin/env python
-
 import rospy
 from geometry_msgs.msg import Twist
-import time
+from nav_msgs.msg import Odometry
+from math import atan2, sqrt, pow
 
-def move_robot():
-    # Initialize the ROS node
-    rospy.init_node('robot_driver', anonymous=True)
-    
-    # Create a publisher for the /cmd_vel topic
-    cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=100)
-    
-    # Define the Twist message for movement
-    move_cmd = Twist()
+class GoToGoal:
+    def __init__(self):
+        rospy.init_node('go_to_goal')
 
-    # Function to drive the robot forward
-    def drive_forward(duration, speed):
-        move_cmd.linear.x = speed  # Move forward with the specified speed
-        move_cmd.angular.z = 0.0   # No rotation
-        cmd_vel_pub.publish(move_cmd)
-        time.sleep(duration)
-        stop_robot()  # Stop after the duration
-    
-    # Function to rotate the robot
-    def rotate_robot(duration, angular_speed):
-        move_cmd.linear.x = 0.0   # No forward movement
-        move_cmd.angular.z = angular_speed  # Rotate at the specified angular speed
-        cmd_vel_pub.publish(move_cmd)
-        time.sleep(duration)
-        stop_robot()  # Stop after the duration
+        # Publisher to send velocity commands
+        self.velocity_publisher = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
+        
+        # Subscriber to get current position from odometry
+        self.odom_subscriber = rospy.Subscriber('/odom', Odometry, self.update_position)
 
-    # Function to stop the robot
-    def stop_robot():
-        move_cmd.linear.x = 0.0
-        move_cmd.angular.z = 0.0
-        cmd_vel_pub.publish(move_cmd)
-    
-    # Give time for the connection to establish
-    rospy.sleep(5)
+        # Initialize robot position
+        self.x = 0.0
+        self.y = 0.0
+        self.theta = 0.0
 
-    # 1. Move forward toward the first line (for 8 seconds)
-    drive_forward(duration=8, speed=0.4)
-    
-    # 2. Rotate to avoid first detected circle
-    rotate_robot(duration=1.5, angular_speed=0.6)
-    
-    # 3. Move forward to bypass the first detected line and circle
-    drive_forward(duration=3, speed=0.4)
-    
-    # 4. Rotate again to follow along the path without intersecting lines
-    rotate_robot(duration=1.2, angular_speed=-0.6)
-    
-    # 5. Move forward to avoid second detected circle and line intersection
-    drive_forward(duration=5, speed=0.5)
-    
-    # 6. Rotate to align towards the top right part of the map
-    rotate_robot(duration=1.5, angular_speed=-0.8)
-    
-    # 7. Move forward to reach the top right corner
-    drive_forward(duration=6, speed=0.5)
-    
-    # 8. Rotate to the right
-    rotate_robot(duration=5, angular_speed=0.6)
+        # Control loop rate
+        self.rate = rospy.Rate(10)
 
-    # Stop the robot before exiting
-    stop_robot()
-    
-    rospy.loginfo("Movement sequence complete. Keeping the node alive.")
-    rospy.spin()
+    def update_position(self, data):
+        self.x = data.pose.pose.position.x
+        self.y = data.pose.pose.position.y
+        orientation_q = data.pose.pose.orientation
+        self.theta = 2 * atan2(orientation_q.z, orientation_q.w)  # Only z and w are needed for 2D yaw
+
+    def move_to_goal(self, goal_x, goal_y, linear_speed=0.2, angular_speed=1.0):
+
+        goal_reached = False
+
+        while not rospy.is_shutdown() and not goal_reached:
+            # Calculate distance to goal
+            distance = sqrt(pow((goal_x - self.x), 2) + pow((goal_y - self.y), 2))
+
+            # Calculate the desired yaw angle to the goal
+            goal_theta = atan2(goal_y - self.y, goal_x - self.x)
+            angle_diff = goal_theta - self.theta
+
+            # Twist message for velocity
+            velocity_msg = Twist()
+
+            # Proportional control for angular speed
+            if abs(angle_diff) > 0.1:
+                velocity_msg.angular.z = angular_speed * angle_diff / abs(angle_diff)
+            else:
+                velocity_msg.angular.z = 0.0
+
+            # Proportional control for linear speed (move forward when facing the goal)
+            if abs(angle_diff) < 0.1:
+                velocity_msg.linear.x = min(linear_speed, linear_speed * distance)
+            else:
+                velocity_msg.linear.x = 0.0
+
+            # Publish velocity command
+            self.velocity_publisher.publish(velocity_msg)
+
+            # Check if goal is reached
+            if distance < 0.05:
+                goal_reached = True
+                velocity_msg.linear.x = 0
+                velocity_msg.angular.z = 0
+                self.velocity_publisher.publish(velocity_msg)  # Stop the robot
+                rospy.loginfo("Goal reached!")
+
+            self.rate.sleep()
 
 if __name__ == '__main__':
     try:
-        move_robot()
+        # Initialize the GoToGoal class
+        navigator = GoToGoal()
+
+        # Define goal locations
+        goal_positions = [(5.0, 8.0), (10.0, -2.0), (-7.0, -4.0)]
+
+        # Move the robot to each goal position
+        for (goal_x, goal_y) in goal_positions:
+            rospy.loginfo(f"Moving to goal: x={goal_x}, y={goal_y}")
+            navigator.move_to_goal(goal_x, goal_y)
+            rospy.sleep(1)  # Pause briefly before moving to the next goal
+
     except rospy.ROSInterruptException:
         pass

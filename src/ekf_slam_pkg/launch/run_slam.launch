@@ -5,7 +5,7 @@
   <rosparam file="$(find ekf_slam_pkg)/config/ekf_slam_params.yaml" command="load"/>
 
   <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
-  <arg name="x_pos" default="0.0"/>
+  <arg name="x_pos" default="-2.0"/>
   <arg name="y_pos" default="0.0"/>
   <arg name="z_pos" default="0.0"/>
   <arg name="yaw_pos" default="0"/>
@@ -23,6 +23,7 @@
     <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/onlyRectangles.world"/>
     <!-- <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/mySimpleWorld.world"/> -->
     <!-- <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/mySimpleWorld_2Feat.world"/> -->
+    <!-- <arg name="world_name" value="$(find ekf_slam_pkg)/world/SelfmadeWorld/mySimpleWorld_onlyRects_10Feat.world"/> -->
     <arg name="paused" value="false"/>
     <arg name="use_sim_time" value="true"/>
     <arg name="gui" value="false"/>
@@ -39,13 +40,12 @@
     <param name="publish_frequency" type="double" value="50.0" />
   </node>
 
-  <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="static_transform_publisher" args="0.000 -0.005 0.000 0 0 0 /map /base_link" /> -->
+   Static transform from map to odom
+  <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_odom_broadcaster" args="0 0 0 0 0 0 map odom" /> -->
 
-  <!-- <node name="joint_state_publisher_gui" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui" >
-    <param name="publish_frequency" type="double" value="30.0"/>
-  </node> -->
+  <!-- Static transform from base_link to base_scan -->
+  <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="base_link_to_base_scan_broadcaster" args="0 0 0 0 0 0 base_link base_scan" /> -->
 
-  <!-- Gmapping -->
   <node pkg="gmapping" type="slam_gmapping" name="turtlebot3_slam_gmapping"> 
     <param name="base_frame" value="$(arg set_base_frame)"/>
     <param name="odom_frame" value="$(arg set_odom_frame)"/>
@@ -53,7 +53,6 @@
     <rosparam command="load" file="$(find turtlebot3_slam)/config/gmapping_params.yaml" />
   </node>
 
-  <!-- Move-Base -->
   <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="log"> output="screen"
     <param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS" />
     <rosparam file="$(find turtlebot3_navigation)/param/costmap_common_params_$(arg model).yaml" command="load" ns="global_costmap" />
@@ -65,22 +64,46 @@
     <remap from="cmd_vel" to="$(arg cmd_vel_topic)"/>
     <remap from="odom" to="$(arg odom_topic)"/>
     <param name="DWAPlannerROS/min_vel_x" value="0.0" if="$(arg move_forward_only)"/>
-  </node>
+  </node> 
 
 
+  <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="static_transform_publisher" args="0.000 -0.005 0.000 0 0 0 /map /base_link" /> -->
+
+  <!-- <node name="joint_state_publisher_gui" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui" >
+    <param name="publish_frequency" type="double" value="30.0"/>
+  </node> -->
 
   <node type="rviz" name="rviz" pkg="rviz" args="-d $(find ekf_slam_pkg)/rviz/rviz_config.rviz"/>
 
   <!-- <arg name="node_start_delay" default="1.0" /> -->
 
-  <node name="main" pkg="ekf_slam_pkg" type="main.py" output="screen" required="true"> </node>
-  <node name="GetJsonData" pkg="ekf_slam_pkg" type="jsonMessageSubscriber.py" output="screen"> </node>
+  <node name="main" pkg="ekf_slam_pkg" type="main.py" required="true"> </node>
+  <node name="GetJsonData" pkg="ekf_slam_pkg" type="jsonMessageSubscriber.py"> </node>
   <node name="slamPlotter" pkg="ekf_slam_pkg" type="slamPlotter.py" output="screen"> </node>
-  <node name="SendGoal" pkg="ekf_slam_pkg" type="SendGoal.py" output="screen"> </node>
+  <node name="SendGoal" pkg="ekf_slam_pkg" type="SendGoal.py"> </node>
   <!-- <node name="MoveRobot" pkg="ekf_slam_pkg" type="moveRobotWithVel.py" output="screen" required="true"> </node> -->
   
-
-  <!-- <node pkg="ekf_slam_pkg" type="correctionAnalysis.py" name="analysis_script" args="/home/ubuntu/Spezialisierung-2/src/ekf_slam_pkg/Debugging Scripts/correctionAnalysis.py" launch-prefix="bash -c" respawn="false" /> -->
-
 </launch>
 
+
+<!-- Gmapping -->
+<!-- <node pkg="gmapping" type="slam_gmapping" name="turtlebot3_slam_gmapping"> 
+  <param name="base_frame" value="$(arg set_base_frame)"/>
+  <param name="odom_frame" value="$(arg set_odom_frame)"/>
+  <param name="map_frame"  value="$(arg set_map_frame)"/>
+  <rosparam command="load" file="$(find turtlebot3_slam)/config/gmapping_params.yaml" />
+</node>
+
+Move-Base
+<node pkg="move_base" type="move_base" respawn="false" name="move_base" output="log"> output="screen"
+  <param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS" />
+  <rosparam file="$(find turtlebot3_navigation)/param/costmap_common_params_$(arg model).yaml" command="load" ns="global_costmap" />
+  <rosparam file="$(find turtlebot3_navigation)/param/costmap_common_params_$(arg model).yaml" command="load" ns="local_costmap" />
+  <rosparam file="$(find turtlebot3_navigation)/param/local_costmap_params.yaml" command="load" />
+  <rosparam file="$(find turtlebot3_navigation)/param/global_costmap_params.yaml" command="load" />
+  <rosparam file="$(find turtlebot3_navigation)/param/move_base_params.yaml" command="load" />
+  <rosparam file="$(find turtlebot3_navigation)/param/dwa_local_planner_params_$(arg model).yaml" command="load" />
+  <remap from="cmd_vel" to="$(arg cmd_vel_topic)"/>
+  <remap from="odom" to="$(arg odom_topic)"/>
+  <param name="DWAPlannerROS/min_vel_x" value="0.0" if="$(arg move_forward_only)"/>
+</node> -->
